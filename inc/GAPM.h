@@ -13,9 +13,10 @@
 
 using namespace std;
 
-#define timelimit 21600
-#define tol_diff_disag 1e-4
-#define GAP_threshold 1e-4
+#define timelimit               21600
+#define tol_diff_disag          1e-4
+#define GAP_threshold           1e-4
+#define expectation_threshold   1e-3
 
 class GAPM
 {
@@ -23,8 +24,12 @@ private:
     /* data */
 public:
     // Data to store solution information
+    size_t termination;
+    double execution_time;
+    size_t iterations;
     double LB;
     double UB;
+    double GAP;
     vector<vector<size_t>> partition;
 
     // Stochatic parameters
@@ -33,20 +38,33 @@ public:
     // dual multipliers
     vector<vector<double>> lambda;
 
+    //Stochastic parameters aggregated for a certain partition
+    vector<vector<double>> stoch_agg;
+
+    //dual multipliers agg
+    vector<vector<double>> lambda_agg;
+
+    //Function to run the entire algorithm
+    template<typename T>
+    void gapm_algorithm(T &ProblemInstance);
+
     //Function to do an iteration of the algorithm
     template<typename T>
     void body_gapm(T &ProblemInstance);
 
     //functions designed to refine the current partition
-    void disaggregation(const double &nScenarios, vector<vector<double>> &lambda);
+    void disaggregation(const double &nScenarios);
     //function which returns the new partition
-    vector<vector<size_t>> refine(const double &nScenarios, vector<vector<double>> &lambda);
+    vector<vector<size_t>> refine(const double &nScenarios);
     //function to refine one element into the partition
-    vector<vector<size_t>> refine_element(vector<size_t> &element, const double &nScenarios, vector<vector<double>> &lambda);
+    vector<vector<size_t>> refine_element(vector<size_t> &element, const double &nScenarios);
     //function to campare scenarios pairwise (their duals)
-    bool compare_duals (const vector<vector<double>> &lambda, const size_t &s1, const size_t &s2);
+    bool compare_duals (const size_t &s1, const size_t &s2);
 
-    size_t stopping_criteria(const vector<double> &RHS, vector<vector<double>> &lambda);
+    //Compute the current solution GAP
+    void compute_gap();
+    
+    bool stopping_criteria(const size_t &nScenarios, vector<double> &prob);
 
 };
 

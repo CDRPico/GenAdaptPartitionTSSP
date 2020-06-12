@@ -23,7 +23,7 @@ template void read_instance_data(SFLP_GAPM &ProblemInstance, string &inst_name, 
 vector<size_t> create_partition(const size_t &Scenarios) {
 	vector<size_t> partition;
 	for (size_t i = 0; i < Scenarios; i++) {
-		partition.push_back(i + 1);
+		partition.push_back(i);
 	}
 	return partition;
 }

@@ -6,12 +6,13 @@ using namespace std;
 #include<iostream>
 #include<random>
 #include<sstream>
+#include"SFLP_GAPM.h"
 
-class SFLP_GAPM;
+//class SFLP_GAPM;
 
 //Read instance data
 template <typename T>
-string read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_inst_name);
+void read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_inst_name);
 
 vector<size_t> create_partition(const size_t &scenarios);
 

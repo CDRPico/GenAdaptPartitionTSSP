@@ -54,16 +54,16 @@ public:
     vector<double> expected_demand(vector<size_t> &element);
 
     //Create master problem given a certain partition
-    void MasterProblemCreation ();
+    IloModel MasterProblemCreation (bool = false);
 
     // Solve master problem given a certain partition
-    void MasterProblemSolution (double &LB, const double &TL);
+    void MasterProblemSolution (IloModel &master, double &LB, const double &TL);
 
     //Create the subproblem
     void SPProblemCreation ();
 
     //Modify the subproblem to solve a different scenario
-    void SPProblemModification(vector<size_t> &element, const bool& = false);
+    void SPProblemModification(vector<size_t> &element, bool = false);
 
     //Solve the subproblem
     void SPProbleSolution(vector<double> &stoch, vector<double> &lambda, double &obj, vector<size_t> &element);
@@ -72,12 +72,6 @@ public:
     double compute_UB();
 
 private:
-    //Master env
-    IloEnv SFLP = IloEnv();
-
-    //Master model
-    IloModel master = IloModel(SFLP);
-
     //Master entities
     Master_CPX master_entities;
 

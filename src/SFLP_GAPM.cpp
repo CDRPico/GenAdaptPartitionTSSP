@@ -9,20 +9,27 @@ SFLP_GAPM::SFLP_GAPM(string &inst_name, string &stoch_inst_name){
     //Call auxiliary function which is templated to read data of any problem
     //using the same structure
     read_instance_data(*this, inst_name, stoch_inst_name);
-
+    compute_varcosts();
     //initialize partition
     partition.push_back(vector<size_t>(create_partition(nScenarios)));
     //initialize values of obj sps
     obj_opt_sps.resize(nScenarios, 0.0);
+    x_bar.resize(nFacilities, 0.0);
+    //instatiate subproblem
+    //SPProblemCreation();
 }
 
 
 vector<double> SFLP_GAPM::expected_demand(vector<size_t> &element){
     vector<double> agg_demand_elem(nClients, 0.0);
+    double partProb = 0.0;
+    for (size_t s = 0; s < element.size(); s++){
+        partProb += probability[s];
+    }
     //Computing average demands
     for (size_t j = 0; j < nClients; j++){
         for (size_t s = 0; s < element.size(); s++){
-            agg_demand_elem[j] += stoch_param[j][element[s]] * probability[s];
+            agg_demand_elem[j] += stoch_param[j][element[s]] * probability[s] / partProb;
         }
     }
     return agg_demand_elem;
@@ -30,9 +37,14 @@ vector<double> SFLP_GAPM::expected_demand(vector<size_t> &element){
 
 
 //Create and solve master problem given a certain partition
-void SFLP_GAPM::MasterProblemCreation ()
+IloModel SFLP_GAPM::MasterProblemCreation (bool removeobjs)
 {
     size_t total_elements = partition.size();
+    //Master env
+    IloEnv SFLP = IloEnv();
+
+    //Master model
+    IloModel master = IloModel(SFLP);
     try{
 
         // Creating first stage variables
@@ -128,11 +140,13 @@ void SFLP_GAPM::MasterProblemCreation ()
     } catch (...) {
         cerr << "Other Exception" << endl;
     }
+    return master;
 }
 
-void SFLP_GAPM::MasterProblemSolution (double &LB, const double &TL)
+void SFLP_GAPM::MasterProblemSolution (IloModel &master,double &LB, const double &TL)
 {
     //Setting up cplex
+    IloEnv SFLP = master.getEnv();
     IloCplex cplex_master(SFLP);
     cplex_master.setParam(IloCplex::Param::Threads, 1);
 	cplex_master.setParam(IloCplex::Param::TimeLimit, TL);
@@ -171,30 +185,28 @@ void SFLP_GAPM::SPProblemCreation (){
         }
 
         //Add objective function
-        subprob.add(IloMinimize(SFLP, master_entities.objective));
-
+        subprob.add(IloMinimize(SFLP_sp, sp_entities.objective));
         //Constraints
         //Demand satisfaction
         sp_entities.dem_constraints = IloRangeArray(SFLP_sp);
         // Facilities capacity
         sp_entities.cap_constraints = IloRangeArray(SFLP_sp);
-
         for (size_t j = 0; j < nClients; j++){
             //LHS
-            IloExpr constr1(SFLP);
+            IloExpr constr1(SFLP_sp);
             for (size_t i = 0; i < nFacilities; i++){
                 constr1 += sp_entities.y[i][j];
             }
             //Adding the constraint
             sp_entities.dem_constraints.add(constr1 >= stoch_param[j][0]);
             //remove linear expression
-            constr1. end();
+            constr1.end();
         }
         subprob.add(sp_entities.dem_constraints);
 
         for (size_t i = 0; i < nFacilities; i++) {
             //RHS
-            IloExpr constr2(SFLP);
+            IloExpr constr2(SFLP_sp);
             for(size_t j = 0; j < nClients; j++){
                 constr2 += sp_entities.y[i][j];
             }
@@ -214,14 +226,14 @@ void SFLP_GAPM::SPProblemCreation (){
 }
 
 //Modify the subproblem to solve a different scenario
-void SFLP_GAPM::SPProblemModification(vector<size_t> &element, const bool& mod_x) {
+void SFLP_GAPM::SPProblemModification(vector<size_t> &element, bool mod_x) {
     // s is used to modify RHS
     //modifying demands
+    vector<double> elem_demand = expected_demand(element);
     for (size_t j = 0; j < nClients; j++){
-        vector<double> elem_demand = expected_demand(element);
         sp_entities.dem_constraints[j].setLB(elem_demand[j]);
+        //cout << sp_entities.dem_constraints[j] << endl << endl;
     }
-
     //Modifying composition of facilities built
     if (mod_x == true) {
         for (size_t i = 0; i < nFacilities; i++) {
@@ -233,30 +245,38 @@ void SFLP_GAPM::SPProblemModification(vector<size_t> &element, const bool& mod_x
 void SFLP_GAPM::SPProbleSolution(vector<double> &stoch, vector<double> &lambda, double &obj, vector<size_t> &element) {
     //Setting up cplex
     IloCplex cplex_sp(SFLP_sp);
-    cplex_sp.setParam(IloCplex::RootAlg, IloCplex::Primal);
+    //cplex_sp.setParam(IloCplex::RootAlg, IloCplex::Primal);
 	cplex_sp.setParam(IloCplex::PreInd, 0);
+    cplex_sp.setOut(SFLP_sp.getNullStream());
+    cplex_sp.extract(subprob);
+    cplex_sp.exportModel("prueba_subproblem.lp");
 	cplex_sp.solve();
 
     if (cplex_sp.getStatus() == IloAlgorithm::Optimal){
+        cout << "duales ";
         for (size_t j = 0; j < nClients; j++) {
             vector<double> elem_demand = expected_demand(element);
             stoch.push_back(elem_demand[j]);
             lambda.push_back(cplex_sp.getDual(sp_entities.dem_constraints[j]));
+            //cout << "demanda " << j << " " << elem_demand[j];
+            cout << lambda.back() << " ";
         }
+        cout << endl;
     } else {
         cerr << "Optimal solution of the problem was not found!" << endl;
     }
+    obj = cplex_sp.getObjValue();
 }
 
 
 double SFLP_GAPM::compute_UB(){
-    double UB = 0.0;
+    double UB_1 = 0.0;
     for (size_t i = 0; i < nFacilities; i++){
-        UB += x_bar[i]*fixed_costs[i];
+        UB_1 += x_bar[i]*fixed_costs[i];
     }
 
     for (size_t s = 0; s < nScenarios; s++){
-        UB += probability[s] * obj_opt_sps[s];
+        UB_1 += probability[s] * obj_opt_sps[s];
     }
-    return UB;
+    return UB_1;
 }

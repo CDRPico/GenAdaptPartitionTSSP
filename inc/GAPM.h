@@ -50,7 +50,7 @@ public:
 
     //Function to do an iteration of the algorithm
     template<typename T>
-    void body_gapm(T &ProblemInstance);
+    size_t body_gapm(T &ProblemInstance);
 
     //functions designed to refine the current partition
     void disaggregation(const double &nScenarios);

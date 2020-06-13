@@ -22,9 +22,14 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
     UB = DBL_MAX;
     LB = 0.0;
     termination = 9;
+
+    //subproblem creation
+    cout << "aqui si llega" << endl;
+    ProblemInstance.SPProblemCreation();
+
     //main loop of the algorithm
     while (GAP > GAP_threshold && execution_time < timelimit) {
-        termination = gapm_algorithm(ProblemInstance);
+        termination = body_gapm(ProblemInstance);
         //update execution time
         end = sc.now();
         auto time_span = static_cast<chrono::duration<double>>(end - start);
@@ -33,6 +38,7 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
             goto outwhile;
         }
         //restart vectors
+        cout << endl << "iteration " << iterations << endl << endl;
         lambda.clear();
         stoch.clear();
         lambda.resize(ProblemInstance.nScenarios);
@@ -48,46 +54,52 @@ outwhile:
 	<< (UB - LB) / (1e-10 + LB) << " "
 	<< 0 << " "
 	<< iterations << " "
-	<< partitions.size()
+	<< partition.size()
 	<< endl;
 }
 template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance);
 
 //This method makes an iteration of the algorithm for a given Master and subproblem
 template <typename T>
-void GAPM::body_gapm(T &ProblemInstance){
+size_t GAPM::body_gapm(T &ProblemInstance){
     //Update number of iterations 
     iterations++;
     //Here we need to create the master problem
     // Notice, this need s to be created after each iteration because we change both
     // number of constraints and variables, cplex does not have some of these features
-    ProblemInstance.MasterProblemCreation();
+    bool removeobjs =false;
+    if (iterations > 1) removeobjs =true;
+
+    IloModel master = ProblemInstance.MasterProblemCreation(removeobjs);
 
     //Solve the master model
-    ProblemInstance.MasterProblemSolution(LB, timelimit - execution_time);
+    ProblemInstance.MasterProblemSolution(master, LB, timelimit - execution_time);
 
     //Solve every subproblem
     for (size_t s = 0; s < ProblemInstance.nScenarios; s++){
+        vector<size_t> el(1, s);
         if (s == 0) {
-            ProblemInstance.SPProblemModification(vector<site_t> a(1, s), true);
+            ProblemInstance.SPProblemModification(el, true);
         } else {
-            ProblemInstance.SPProblemModification(vector<site_t> a(1, s));
+            ProblemInstance.SPProblemModification(el);
         }
         double obj = 0.0;
-        ProblemInstance.SPProbleSolution(stoch[s], lambda[s], obj, vector<site_t> a(1, s));
+        ProblemInstance.SPProbleSolution(stoch[s], lambda[s], obj, el);
         ProblemInstance.obj_opt_sps[s] = obj;
     }
 
     //Compute the upper bound
-    ProblemInstance.compute_UB();
+    UB = ProblemInstance.compute_UB();
 
     //Update solution Gap
     compute_gap();
 
-    double continue_algorithm = 0;
+    double continue_algorithm = 9;
+    cout << "THE CURRENT GAP IS " << GAP << endl;
     if (GAP > GAP_threshold){
         //run disaggregation procedure locally
-        disaggregation(ProblemInstance.nscenarios);
+        disaggregation(ProblemInstance.nScenarios);
+        ProblemInstance.partition = partition;
 
         for (size_t s = 0; s < partition.size(); s++) {
             if (s == 0) {
@@ -96,7 +108,7 @@ void GAPM::body_gapm(T &ProblemInstance){
                 ProblemInstance.SPProblemModification(partition[s]);
             }
             double obj = 0.0;
-            ProblemInstance.SPProbleSolution(stoch_agg[s], lambda_agg[s], obj, vector<site_t> a(1, s));
+            ProblemInstance.SPProbleSolution(stoch_agg[s], lambda_agg[s], obj, partition[s]);
         }
 
         //run checking stopping criteria
@@ -105,8 +117,9 @@ void GAPM::body_gapm(T &ProblemInstance){
     } else {
         continue_algorithm = 1;
     }
+    return continue_algorithm;
 }
-template void GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
+template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
 
 
 //---------------- TODO include possibility of infeasible subproblems   -------------------//
@@ -123,6 +136,14 @@ void GAPM::disaggregation(const double &nScenarios){
     stoch_agg.resize(partition.size());
     lambda_agg.clear();
     lambda_agg.resize(partition.size());
+    cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
+    for (size_t i = 0; i < partition.size(); i++) {
+		for (size_t j = 0; j < partition[i].size(); j++) {
+			cout << partition[i][j] << ' ';
+		}
+		cout << endl;
+	    //cin.get();
+	}
 }
 
 vector<vector<size_t>> GAPM::refine(const double &nScenarios) {

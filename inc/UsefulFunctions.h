@@ -8,6 +8,20 @@ using namespace std;
 #include<sstream>
 #include"SFLP_GAPM.h"
 
+//Subproblem info solution
+struct solution_sps {
+    //Vector of scenarios summarized
+    vector<size_t> scen;
+    //Bool indicating the status of the solution
+    // 1 will be optimal
+    // 2 infeasible
+    // 9 timelimit reached
+    size_t F;
+    //Objective value
+    double obj;
+    //dual multipliers of key constraints
+    vector<double> lambda;
+};
 //class SFLP_GAPM;
 
 //Read instance data

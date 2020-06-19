@@ -36,13 +36,13 @@ public:
     vector<vector<double>> stoch;
 
     // dual multipliers
-    vector<vector<double>> lambda;
+    vector<solution_sps> sp_info;
 
     //Stochastic parameters aggregated for a certain partition
     vector<vector<double>> stoch_agg;
 
     //dual multipliers agg
-    vector<vector<double>> lambda_agg;
+    vector<solution_sps> sp_info_agg;
 
     //Function to run the entire algorithm
     template<typename T>

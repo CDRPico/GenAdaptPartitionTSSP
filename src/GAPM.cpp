@@ -8,7 +8,7 @@
 template<typename T>
 void GAPM::gapm_algorithm(T &ProblemInstance) {
     //initialize size of stochastic parameters and duals
-    lambda.resize(ProblemInstance.nScenarios);
+    sp_info.resize(ProblemInstance.nScenarios);
     stoch.resize(ProblemInstance.nScenarios);
     partition = ProblemInstance.partition;
     //Creating the clock to control the execution time
@@ -39,9 +39,11 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
         }
         //restart vectors
         cout << endl << "iteration " << iterations << endl << endl;
-        lambda.clear();
+        sp_info.clear();
         stoch.clear();
-        lambda.resize(ProblemInstance.nScenarios);
+        sp_info_agg.clear();
+        stoch_agg.clear();
+        //sp_info.lambda.resize(ProblemInstance.nScenarios);
         stoch.resize(ProblemInstance.nScenarios);
     }
 outwhile:
@@ -77,19 +79,18 @@ size_t GAPM::body_gapm(T &ProblemInstance){
 
     //Solve every subproblem
     for (size_t s = 0; s < ProblemInstance.nScenarios; s++){
-        vector<size_t> el(1, s);
+        sp_info[s].scen = vector<size_t> el(1, s);
         if (s == 0) {
-            ProblemInstance.SPProblemModification(el, true);
+            ProblemInstance.SPProblemModification(sp_info[s].scen, true);
         } else {
-            ProblemInstance.SPProblemModification(el);
+            ProblemInstance.SPProblemModification(sp_info[s].scen);
         }
         double obj = 0.0;
-        ProblemInstance.SPProbleSolution(stoch[s], lambda[s], obj, el);
-        ProblemInstance.obj_opt_sps[s] = obj;
+        ProblemInstance.SPProbleSolution(stoch[s], sp_info[s]);
     }
 
     //Compute the upper bound
-    UB = ProblemInstance.compute_UB();
+    UB = ProblemInstance.compute_UB(sp_info);
 
     //Update solution Gap
     compute_gap();
@@ -102,13 +103,14 @@ size_t GAPM::body_gapm(T &ProblemInstance){
         ProblemInstance.partition = partition;
 
         for (size_t s = 0; s < partition.size(); s++) {
+            sp_info_agg[s].scen = partition[s];
             if (s == 0) {
                 ProblemInstance.SPProblemModification(partition[s], true);
             } else {
                 ProblemInstance.SPProblemModification(partition[s]);
             }
             double obj = 0.0;
-            ProblemInstance.SPProbleSolution(stoch_agg[s], lambda_agg[s], obj, partition[s]);
+            ProblemInstance.SPProbleSolution(stoch_agg[s], sp_info_agg[s]);
         }
 
         //run checking stopping criteria
@@ -121,9 +123,6 @@ size_t GAPM::body_gapm(T &ProblemInstance){
 }
 template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
 
-
-//---------------- TODO include possibility of infeasible subproblems   -------------------//
-
 //function designed to refine the current partition
 void GAPM::disaggregation(const double &nScenarios){
     //a new partition will be created and will further replace the previous one
@@ -134,8 +133,8 @@ void GAPM::disaggregation(const double &nScenarios){
     //reset stoch params agg and dual mult agg
     stoch_agg.clear();
     stoch_agg.resize(partition.size());
-    lambda_agg.clear();
-    lambda_agg.resize(partition.size());
+    sp_info_agg.clear();
+    sp_info_agg.resize(partition.size());
     cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
     for (size_t i = 0; i < partition.size(); i++) {
 		for (size_t j = 0; j < partition[i].size(); j++) {
@@ -186,8 +185,8 @@ vector<vector<size_t>> GAPM::refine_element(vector<size_t> &element, const doubl
     vector<double> normtwo_computation;
     //Iterate through the element to compare the duals of the subproblems
     for (size_t la = 0; la < el_size; la++) {
-        taxicab_computation.push_back(taxicab(lambda[la]));
-        normtwo_computation.push_back(norm2(lambda[la]));
+        taxicab_computation.push_back(taxicab(sp_info[la].lambda));
+        normtwo_computation.push_back(norm2(sp_info[la].lambda));
         if (la == 0) {
             new_element.push_back(vector<size_t>( { element[la] } ));
         }
@@ -195,24 +194,29 @@ vector<vector<size_t>> GAPM::refine_element(vector<size_t> &element, const doubl
             size_t tamano = new_element.size();
             //Create a new loop to compare current values regarding the previous already computed
             for (size_t lb = 0; lb < tamano; lb++) {
-                bool signal = true;
-                if (fabs(taxicab_computation[la]-taxicab_computation[lb]) < tol_diff_disag && 
-                    fabs(normtwo_computation[la]-normtwo_computation[lb]) < tol_diff_disag) 
-                {
-                    signal = compare_duals(element[la], element[lb]);
-                }
-                // If there is no difference between lambdas, this scenario can be added to the current new element position
-                if (signal == false) {
-                    new_element[lb].push_back(element[la]);
-                    break;
-                }
-                //otherwise, continue checking until the end of the vector
-                //if no coincidence was found, another element is added
-                else {
-                    if (lb == (tamano-1)) {
-                        new_element.push_back(vector<size_t>( { element[la] } ));
+                if (sp_info[la].F == sp_info[new_element[lb].back() - 1].F) {
+                    bool signal = true;
+                    if (fabs(taxicab_computation[la]-taxicab_computation[lb]) < tol_diff_disag && 
+                        fabs(normtwo_computation[la]-normtwo_computation[lb]) < tol_diff_disag) 
+                    {
+                        signal = compare_duals(element[la], element[lb]);
+                    }
+                    // If there is no difference between lambdas, this scenario can be added to the current new element position
+                    if (signal == false) {
+                        new_element[lb].push_back(element[la]);
+                        break;
+                    }
+                    //otherwise, continue checking until the end of the vector
+                    //if no coincidence was found, another element is added
+                    else {
+                        if (lb == (tamano-1)) {
+                            new_element.push_back(vector<size_t>( { element[la] } ));
+                        }
                     }
                 }
+                else if (lb == (tamano -1)) {
+                    new_element.push_back(vector<size_t>( { element[la] } ));
+                }  
             }
         }
     }
@@ -223,8 +227,8 @@ vector<vector<size_t>> GAPM::refine_element(vector<size_t> &element, const doubl
 bool GAPM::compare_duals (const size_t &s1, const size_t &s2) {
     bool signal = false;
     //Check equality between elements
-    for (size_t j = 0; lambda[s1].size(); j++) {
-        if ( fabs( lambda[s1][j] - lambda[s2][j] ) > tol_diff_disag ) {
+    for (size_t j = 0; sp_info[s1].lambda.size(); j++) {
+        if ( fabs( sp_info[s1].lambda[j] - sp_info[s2].lambda[j] ) > tol_diff_disag ) {
             signal = true;
             break;
         }
@@ -249,10 +253,10 @@ bool GAPM::stopping_criteria(const size_t &nScenarios, vector<double> &prob) {
         double atom_expectation = 0.0;
         double element_prob = partition[p].size()/nScenarios;
         double agg_expectation = 0.0;
-        for (size_t j = 0; j < lambda_agg[p].size(); j++) {
-            agg_expectation += (lambda_agg[p][j] * stoch_agg[p][j]);
+        for (size_t j = 0; j < sp_info_agg[p].lambda.size(); j++) {
+            agg_expectation += (sp_info_agg[p].lambda[j] * stoch_agg[p][j]);
             for (size_t s = 0; s < partition[p].size(); s++) {
-                atom_expectation += prob[partition[p][s]] / element_prob * (lambda[partition[p][s]][j] * stoch[partition[p][s]][j]);
+                atom_expectation += prob[partition[p][s]] / element_prob * (sp_info[partition[p][s]].lambda[j] * stoch[partition[p][s]][j]);
             }
         }
 

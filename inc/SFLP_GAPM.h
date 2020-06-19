@@ -11,11 +11,24 @@ using namespace std;
 #include"InstanceSFLP.h"
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
+#include<gurobi_c++.h>
 #include<cfloat>
 
 ILOSTLBEGIN
 
-//Useful Definitions
+//Definitions for Gurobi
+struct SubProblem_GRB {
+    //Variables
+    GRBVar **y = NULL;
+
+    GRBConstr *dem_constraints = NULL;
+
+    GRBConstr *cap_constraints = NULL;
+
+    SubProblem_GRB() = default;
+};
+
+//Useful Definitions CPLEX
 typedef IloArray<IloNumVarArray> IloNumVarArray2;
 typedef IloArray<IloNumVarArray2> IloNumVarArray3;
 
@@ -41,6 +54,7 @@ struct SubProblem_CPX {
     IloRangeArray cap_constraints;
 };
 
+
 class SFLP_GAPM : public InstanceSFLP 
 {
 public:
@@ -59,30 +73,61 @@ public:
     // Solve master problem given a certain partition
     void MasterProblemSolution (IloModel &master, double &LB, const double &TL);
 
-    //Create the subproblem
-    void SPProblemCreation ();
+    //Create the subproblem CPLEX
+    void SPProblemCreation_CPX ();
+    //Create the subproblem CPLEX
+    void SPProblemCreation_GRB ();
 
-    //Modify the subproblem to solve a different scenario
-    void SPProblemModification(vector<size_t> &element, bool = false);
+    //Modify the subproblem to solve a different scenario CPLEX
+    void SPProblemModification_CPX(vector<size_t> &element, bool = false);
+    //Modify the subproblem to solve a different scenario CPLEX
+    void SPProblemModification_GRB(vector<size_t> &element, bool = false);
 
     //Solve the subproblem
-    void SPProbleSolution(vector<double> &stoch, vector<double> &lambda, double &obj, vector<size_t> &element);
+    void SPProbleSolution_CPX(vector<double> &stoch, solution_sps &sp_info);
+    //Solve the subproblem
+    void SPProbleSolution_GRB(vector<double> &stoch, solution_sps &sp_info);
 
     // Given the current x_bar and solution of subprobs, the UB is computed
-    double compute_UB();
+    double compute_UB(vector<solution_sps> &sp_info);
+
+    // Labeling second stage variables
+    void Labeling_y();
+
+    //Labeling demand constraints
+    void Label_demand_constr();
+    //Labeling capacity constraints
+    void Label_capacity_constr();
 
 private:
     //Master entities
     Master_CPX master_entities;
 
     //SubProblem env
-    IloEnv SFLP_sp = IloEnv();
+    IloEnv SFLP_sp_cpx = IloEnv();
 
     //Subproblem model
-    IloModel subprob = IloModel(SFLP_sp);
+    IloModel subprob_cpx = IloModel(SFLP_sp_cpx);
 
-    //Subproblem entities
-    SubProblem_CPX sp_entities;
+    //Subproblem entities CPLEX
+    SubProblem_CPX sp_entities_cpx;
+
+    //Gurobi env
+    GRBEnv SFLP_sp_grb = GRBEnv();
+
+    //Gurobi Model
+    GRBModel subprob_grb = GRBModel(SFLP_sp_grb);
+
+    //Subproblem entities Gurobi
+    SubProblem_GRB sp_entities_grb;
+
+    //Names second stage variables
+    vector<vector<string>> Label_y;
+
+    //Demand constraint label
+    vector<string> Label_demconst;
+    //Capacity constraint label
+    vector<string> Label_capconst;
 };
 
 #endif

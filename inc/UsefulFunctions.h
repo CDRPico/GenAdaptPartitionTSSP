@@ -8,21 +8,25 @@ using namespace std;
 #include<sstream>
 #include"SFLP_GAPM.h"
 
+#ifndef USF_H
+#define USF_H
+
 //Subproblem info solution
 struct solution_sps {
-    //Vector of scenarios summarized
-    vector<size_t> scen;
-    //Bool indicating the status of the solution
-    // 1 will be optimal
-    // 2 infeasible
-    // 9 timelimit reached
-    size_t F;
-    //Objective value
-    double obj;
-    //dual multipliers of key constraints
-    vector<double> lambda;
+	//Vector of scenarios summarized
+	vector<size_t> scen;
+	//Bool indicating the status of the solution
+	// 1 will be optimal
+	// 2 infeasible
+	// 9 timelimit reached
+	size_t F;
+	//Objective value
+	double obj;
+	//dual multipliers of key constraints
+	vector<double> lambda;
 };
-//class SFLP_GAPM;
+
+class SFLP_GAPM;
 
 //Read instance data
 template <typename T>
@@ -35,3 +39,5 @@ double taxicab(vector<double> &vect);
 
 //Computing norm-2
 double norm2(vector<double> &vect);
+
+#endif

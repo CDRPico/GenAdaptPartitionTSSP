@@ -15,7 +15,7 @@ using namespace std;
 
 #define timelimit               21600
 #define tol_diff_disag          1e-4
-#define GAP_threshold           1e-4
+#define GAP_threshold           1e-3
 #define expectation_threshold   1e-3
 
 class GAPM

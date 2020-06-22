@@ -7,6 +7,8 @@ ILOLAZYCONSTRAINTCALLBACK2(LazyOptCuts,
     BendersSFLP&, Instance,
     const string&, algo)
 {
+	Instance.sp_info.resize(Instance.nScenarios);
+	Instance.stoch.resize(Instance.nScenarios);
     size_t scenarios = 0;
     if (algo == "s") {
         scenarios = 1;
@@ -35,9 +37,10 @@ ILOLAZYCONSTRAINTCALLBACK2(LazyOptCuts,
     bool violated = false;
     double single_lhs = 0.0;
     IloExpr new_single_cut(getEnv());
-    double const_part_single;
+    double const_part_single = 0.0;
 
     for (size_t p = 0; p < Instance.partition.size(); p++) {
+		Instance.sp_info_agg[p].scen = Instance.partition[p];
         if (p == 0) {
 			Instance.SPProblemModification_CPX(Instance.partition[p], true);
 		}
@@ -109,11 +112,16 @@ ILOLAZYCONSTRAINTCALLBACK2(LazyOptCuts,
         disag_procedure to_dis;
 		to_dis.disaggregation(Instance.sp_info, Instance.partition, Instance.nScenarios);
     }
+	Instance.sp_info.clear();
+	Instance.stoch.clear();
+	Instance.sp_info_agg.clear();
+	Instance.stoch_agg.clear();
 }
 
 void BendersSFLP::CreateMaster() {
     //Declaring variables
     ent_sflp.x = IloNumVarArray(Mast_Bend, nFacilities);
+	ent_sflp.objective = IloExpr(Mast_Bend);
     for (size_t i = 0; i < nFacilities; i++) {
         ent_sflp.x[i] = IloNumVar(Mast_Bend, 0.0, 1.0, ILOINT);
         Mast_mod.add(ent_sflp.x[i]);
@@ -143,6 +151,8 @@ void BendersSFLP::CreateMaster() {
 	Mast_mod.add(ent_sflp.Feasibility);
 	constr3.end();
 
+	//subproblem creation
+	SPProblemCreation_CPX();
 
     /* Create cplex enviroment to solve the problem */
     IloCplex cplex(Mast_Bend);
@@ -159,4 +169,7 @@ void BendersSFLP::CreateMaster() {
 
     string algo = "a";
     cplex.use(LazyOptCuts(this->Mast_Bend, *this, algo));
+
+	//Solve the model
+	cplex.solve();
 }

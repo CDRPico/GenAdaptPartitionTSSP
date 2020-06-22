@@ -168,13 +168,14 @@ void SFLP_GAPM::SPProblemCreation_CPX() {
 	try {
 		//Create variables
 		//Demand distribution
+		Labeling_y();
 		sp_entities_cpx.y = IloNumVarArray2(SFLP_sp_cpx, nFacilities);
 		//Populate OF
 		sp_entities_cpx.objective = IloExpr(SFLP_sp_cpx);
 		for (size_t i = 0; i < nFacilities; i++) {
 			sp_entities_cpx.y[i] = IloNumVarArray(SFLP_sp_cpx, nClients);
 			for (size_t j = 0; j < nClients; j++) {
-				sp_entities_cpx.y[i][j] = IloNumVar(SFLP_sp_cpx, 0.0, DBL_MAX, ILOFLOAT);
+				sp_entities_cpx.y[i][j] = IloNumVar(SFLP_sp_cpx, 0.0, DBL_MAX, ILOFLOAT, Label_y[i][j].c_str());
 				subprob_cpx.add(sp_entities_cpx.y[i][j]);
 				sp_entities_cpx.objective += dist_costs[i][j] * sp_entities_cpx.y[i][j];
 			}
@@ -184,8 +185,10 @@ void SFLP_GAPM::SPProblemCreation_CPX() {
 		subprob_cpx.add(IloMinimize(SFLP_sp_cpx, sp_entities_cpx.objective));
 		//Constraints
 		//Demand satisfaction
+		Label_demand_constr();
 		sp_entities_cpx.dem_constraints = IloRangeArray(SFLP_sp_cpx);
 		// Facilities capacity
+		Label_capacity_constr();
 		sp_entities_cpx.cap_constraints = IloRangeArray(SFLP_sp_cpx);
 		for (size_t j = 0; j < nClients; j++) {
 			//LHS
@@ -195,6 +198,7 @@ void SFLP_GAPM::SPProblemCreation_CPX() {
 			}
 			//Adding the constraint
 			sp_entities_cpx.dem_constraints.add(constr1 >= stoch_param[j][0]);
+			sp_entities_cpx.dem_constraints[j].setName(Label_demconst[j].c_str());
 			//remove linear expression
 			constr1.end();
 		}
@@ -209,6 +213,7 @@ void SFLP_GAPM::SPProblemCreation_CPX() {
 			//RHS
 			//Adding the constraint
 			sp_entities_cpx.cap_constraints.add(constr2 <= x_bar[i] * facil_capacities[i]);
+			sp_entities_cpx.cap_constraints[i].setName(Label_capconst[i].c_str());
 			//Remove the linear expression
 			constr2.end();
 		}
@@ -253,15 +258,15 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 	stoch.clear();
 	sp_info->lambda.clear();
 	if (cplex_sp.getStatus() == IloAlgorithm::Optimal) {
-		cout << "duales ";
+		//cout << "duales ";
 		for (size_t j = 0; j < nClients; j++) {
 			vector<double> elem_demand = expected_demand(sp_info->scen);
 			stoch.push_back(elem_demand[j]);
 			sp_info->lambda.push_back(cplex_sp.getDual(sp_entities_cpx.dem_constraints[j]));
 			//cout << "demanda " << j << " " << elem_demand[j];
-			cout << sp_info->lambda.back() << " ";
+			//cout << sp_info->lambda.back() << " ";
 		}
-		cout << endl;
+		//cout << endl;
 		if (benders) {
 			for (size_t i = 0; i < nFacilities; i++) {
 				sp_info->lambda.push_back(cplex_sp.getDual(sp_entities_cpx.cap_constraints[i]));

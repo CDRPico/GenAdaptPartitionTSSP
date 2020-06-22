@@ -82,13 +82,13 @@ void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vecto
 	partition = new_partition;
 	new_partition.clear();
 	cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
-	for (size_t i = 0; i < partition.size(); i++) {
+	/*for (size_t i = 0; i < partition.size(); i++) {
 		for (size_t j = 0; j < partition[i].size(); j++) {
 			cout << partition[i][j] << ' ';
 		}
 		cout << endl;
 		//cin.get();
-	}
+	}*/
 }
 
 vector<vector<size_t>> disag_procedure::refine(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios) {
@@ -181,3 +181,5 @@ bool disag_procedure::compare_duals(solution_sps &sp_info_s1, solution_sps &sp_i
 	}
 	return signal;
 }
+
+disag_procedure::~disag_procedure() {};

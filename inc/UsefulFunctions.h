@@ -8,9 +8,10 @@ using namespace std;
 #include<sstream>
 #include"SFLP_GAPM.h"
 
-#define tolabscuts 1e-10
-#define tolrelcuts 1e-4
-#define timelimit  21600
+#define tolabscuts		1e-10
+#define tolrelcuts		1e-4
+#define timelimit		21600
+#define tol_diff_disag	1e-4
 
 #ifndef USF_H
 #define USF_H
@@ -36,6 +37,7 @@ class disag_procedure
 {
 public:
 	disag_procedure() = default;
+	~disag_procedure();
 	//functions designed to refine the current partition
 	void disaggregation(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios);
 	//function which returns the new partition
@@ -44,7 +46,6 @@ public:
 	vector<vector<size_t>> refine_element(vector<solution_sps> &sp_info,vector<size_t> &element, const double &nScenarios);
 	//function to campare scenarios pairwise (their duals)
 	bool compare_duals(solution_sps &sp_info_s1, solution_sps &sp_info_s2, const size_t &s1, const size_t &s2);
-	~disag_procedure();
 };
 
 //Read instance data

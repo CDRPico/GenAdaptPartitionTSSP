@@ -22,7 +22,7 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
 	termination = 9;
 
 	//subproblem creation
-	ProblemInstance.SPProblemCreation_GRB();
+	ProblemInstance.SPProblemCreation_CPX();
 
 	//main loop of the algorithm
 	while (GAP > GAP_threshold && execution_time < timelimit) {
@@ -81,13 +81,13 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 		vector<size_t> el(1, s);
 		sp_info[s].scen = el;
 		if (s == 0) {
-			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen, true);
+			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen, true);
 		}
 		else {
-			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen);
+			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen);
 		}
 		double obj = 0.0;
-		ProblemInstance.SPProbleSolution_GRB(stoch[s], &sp_info[s]);
+		ProblemInstance.SPProbleSolution_CPX(stoch[s], &sp_info[s]);
 	}
 
 	//Compute the upper bound
@@ -108,19 +108,25 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	cout << "THE CURRENT GAP IS " << GAP << endl;
 	if (GAP > GAP_threshold) {
 		//run disaggregation procedure locally
-		disaggregation(ProblemInstance.nScenarios);
+		disag_procedure to_dis;
+		to_dis.disaggregation(sp_info, partition, ProblemInstance.nScenarios);
+		//reset stoch params agg and dual mult agg
+		stoch_agg.clear();
+		stoch_agg.resize(partition.size());
+		sp_info_agg.clear();
+		sp_info_agg.resize(partition.size());
 		ProblemInstance.partition = partition;
 
 		for (size_t s = 0; s < partition.size(); s++) {
 			sp_info_agg[s].scen = partition[s];
 			if (s == 0) {
-				ProblemInstance.SPProblemModification_GRB(partition[s], true);
+				ProblemInstance.SPProblemModification_CPX(partition[s], true);
 			}
 			else {
-				ProblemInstance.SPProblemModification_GRB(partition[s]);
+				ProblemInstance.SPProblemModification_CPX(partition[s]);
 			}
 			double obj = 0.0;
-			ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s]);
+			ProblemInstance.SPProbleSolution_CPX(stoch_agg[s], &sp_info_agg[s]);
 		}
 
 		//run checking stopping criteria
@@ -133,119 +139,6 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	return continue_algorithm;
 }
 template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
-
-//function designed to refine the current partition
-void GAPM::disaggregation(const double &nScenarios) {
-	//a new partition will be created and will further replace the previous one
-	vector<vector<size_t>> new_partition = refine(nScenarios);
-	partition.clear();
-	partition = new_partition;
-	new_partition.clear();
-	//reset stoch params agg and dual mult agg
-	stoch_agg.clear();
-	stoch_agg.resize(partition.size());
-	sp_info_agg.clear();
-	sp_info_agg.resize(partition.size());
-	cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
-	for (size_t i = 0; i < partition.size(); i++) {
-		for (size_t j = 0; j < partition[i].size(); j++) {
-			cout << partition[i][j] << ' ';
-		}
-		cout << endl;
-		//cin.get();
-	}
-}
-
-vector<vector<size_t>> GAPM::refine(const double &nScenarios) {
-	size_t partition_size = partition.size();
-	vector<vector<size_t>> outpart;
-	for (size_t k = 0; k < partition_size; k++) {
-		//Get the refination of element k into the partition
-		vector<vector<size_t>> partial = refine_element(partition[k], nScenarios);
-		//Insert in outpart the vector obtained above
-		size_t tamano = outpart.size();
-		// if k = 0 outpart is empty and will be initialized with partial
-		if (k == 0) {
-			outpart = partial;
-		}
-		// otherwise the data from partial will be pushed back one scenario at a time
-		else {
-			for (size_t la = 0; la < partial.size(); la++) {
-				for (size_t lb = 0; lb < partial[la].size(); lb++) {
-					if (lb == 0) {
-						outpart.push_back(vector<size_t>({ partial[la][lb] }));
-					}
-					else {
-						outpart[la + tamano].push_back(partial[la][lb]);
-					}
-				}
-			}
-			partial.clear();
-		}
-	}
-	return outpart;
-}
-
-//function to refine one element into the partition
-vector<vector<size_t>> GAPM::refine_element(vector<size_t> &element, const double &nScenarios) {
-	//Element size
-	size_t el_size = element.size();
-	//Vector to be returned
-	vector<vector<size_t>> new_element;
-	vector<double> taxicab_computation;
-	vector<double> normtwo_computation;
-	//Iterate through the element to compare the duals of the subproblems
-	for (size_t la = 0; la < el_size; la++) {
-		taxicab_computation.push_back(taxicab(sp_info[la].lambda));
-		normtwo_computation.push_back(norm2(sp_info[la].lambda));
-		if (la == 0) {
-			new_element.push_back(vector<size_t>({ element[la] }));
-		}
-		else {
-			size_t tamano = new_element.size();
-			//Create a new loop to compare current values regarding the previous already computed
-			for (size_t lb = 0; lb < tamano; lb++) {
-				if (sp_info[la].F == sp_info[new_element[lb].back()].F) {
-					bool signal = true;
-					if (fabs(taxicab_computation[la] - taxicab_computation[lb]) < tol_diff_disag &&
-						fabs(normtwo_computation[la] - normtwo_computation[lb]) < tol_diff_disag)
-					{
-						signal = compare_duals(element[la], element[lb]);
-					}
-					// If there is no difference between lambdas, this scenario can be added to the current new element position
-					if (signal == false) {
-						new_element[lb].push_back(element[la]);
-						break;
-					}
-					//otherwise, continue checking until the end of the vector
-					//if no coincidence was found, another element is added
-					else {
-						if (lb == (tamano - 1)) {
-							new_element.push_back(vector<size_t>({ element[la] }));
-						}
-					}
-				}
-				else if (lb == (tamano - 1)) {
-					new_element.push_back(vector<size_t>({ element[la] }));
-				}
-			}
-		}
-	}
-	return new_element;
-}
-
-//function to campare scenarios pairwise (their duals)
-bool GAPM::compare_duals(const size_t &s1, const size_t &s2) {
-	bool signal = false;
-	//Check equality between elements
-	for (size_t j = 0; j < sp_info[s1].lambda.size(); j++) {
-		if (fabs(sp_info[s1].lambda[j] - sp_info[s2].lambda[j]) > tol_diff_disag) {
-			signal = true;
-			break;
-		}
-	}
-	return signal;
-}
 
 
 void GAPM::compute_gap() {

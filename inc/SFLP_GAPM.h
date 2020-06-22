@@ -61,6 +61,8 @@ class SFLP_GAPM : public InstanceSFLP
 public:
 	vector<vector<size_t>> partition;
 	vector<double> obj_opt_sps;
+	//Max demand, worst case scenario
+	double max_dem;
 
 	//COnstructor takes the name of the instance and the name of the stoch instance
 	SFLP_GAPM(string &inst_name, string &stoch_inst_name);
@@ -85,7 +87,7 @@ public:
 	void SPProblemModification_GRB(vector<size_t> &element, bool = false);
 
 	//Solve the subproblem
-	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info);
+	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool = false);
 	//Solve the subproblem
 	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info);
 
@@ -100,7 +102,7 @@ public:
 	//Labeling capacity constraints
 	void Label_capacity_constr();
 
-private:
+protected:
 	//Master entities
 	Master_CPX master_entities;
 

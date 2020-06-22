@@ -17,6 +17,8 @@ SFLP_GAPM::SFLP_GAPM(string &inst_name, string &stoch_inst_name) {
 	x_bar.resize(nFacilities, 0.0);
 	//instatiate subproblem
 	//SPProblemCreation();
+	//Worst case scenario demand
+	max_dem = max_demand(stoch_param);
 }
 
 
@@ -82,9 +84,7 @@ IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
 		master_entities.Feasibility = IloRangeArray(SFLP);
 
 		//Demand constraints
-		double max_demand = 0.0;
 		for (size_t s = 0; s < total_elements; s++) {
-			double scenario_tot_demand = 0.0;
 			vector<double> elem_demand = expected_demand(partition[s]);
 			for (size_t j = 0; j < nClients; j++) {
 				//LHS
@@ -96,12 +96,6 @@ IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
 				master_entities.dem_satisfaction.add(constr1 >= elem_demand[j]);
 				//remove linear expression
 				constr1.end();
-				//total scenario demand
-				scenario_tot_demand += elem_demand[j];
-			}
-			//update the maximum demand across scenarios
-			if (scenario_tot_demand > max_demand) {
-				max_demand = scenario_tot_demand;
 			}
 		}
 		master.add(master_entities.dem_satisfaction);
@@ -131,7 +125,7 @@ IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
 			constr3 += facil_capacities[i] * master_entities.x[i];
 		}
 		//the constraint
-		master_entities.Feasibility.add(constr3 >= max_demand);
+		master_entities.Feasibility.add(constr3 >= max_dem);
 		master.add(master_entities.Feasibility);
 		constr3.end();
 
@@ -246,7 +240,7 @@ void SFLP_GAPM::SPProblemModification_CPX(vector<size_t> &element, bool mod_x) {
 	}
 }
 
-void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info) {
+void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool benders) {
 	//Setting up cplex
 	IloCplex cplex_sp(SFLP_sp_cpx);
 	//cplex_sp.setParam(IloCplex::RootAlg, IloCplex::Primal);
@@ -268,6 +262,11 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 			cout << sp_info->lambda.back() << " ";
 		}
 		cout << endl;
+		if (benders) {
+			for (size_t i = 0; i < nFacilities; i++) {
+				sp_info->lambda.push_back(cplex_sp.getDual(sp_entities_cpx.cap_constraints[i]));
+			}
+		}
 	}
 	else {
 		cerr << "Optimal solution of the problem was not found!" << endl;

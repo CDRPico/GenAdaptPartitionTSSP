@@ -8,6 +8,10 @@ using namespace std;
 #include<sstream>
 #include"SFLP_GAPM.h"
 
+#define tolabscuts 1e-10
+#define tolrelcuts 1e-4
+#define timelimit  21600
+
 #ifndef USF_H
 #define USF_H
 
@@ -28,6 +32,21 @@ struct solution_sps {
 
 class SFLP_GAPM;
 
+class disag_procedure 
+{
+public:
+	disag_procedure() = default;
+	//functions designed to refine the current partition
+	void disaggregation(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios);
+	//function which returns the new partition
+	vector<vector<size_t>> refine(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios);
+	//function to refine one element into the partition
+	vector<vector<size_t>> refine_element(vector<solution_sps> &sp_info,vector<size_t> &element, const double &nScenarios);
+	//function to campare scenarios pairwise (their duals)
+	bool compare_duals(solution_sps &sp_info_s1, solution_sps &sp_info_s2, const size_t &s1, const size_t &s2);
+	~disag_procedure();
+};
+
 //Read instance data
 template <typename T>
 void read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_inst_name);
@@ -39,5 +58,10 @@ double taxicab(vector<double> &vect);
 
 //Computing norm-2
 double norm2(vector<double> &vect);
+
+//Compute worst case demand SFLP
+double max_demand(vector<vector<double>> &stoch_dem);
+
+bool smallerWithTolerance(double smaller, double larger);
 
 #endif

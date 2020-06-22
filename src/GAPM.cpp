@@ -7,234 +7,142 @@
 
 template<typename T>
 void GAPM::gapm_algorithm(T &ProblemInstance) {
-    //initialize size of stochastic parameters and duals
-    lambda.resize(ProblemInstance.nScenarios);
-    stoch.resize(ProblemInstance.nScenarios);
-    partition = ProblemInstance.partition;
-    //Creating the clock to control the execution time
-    chrono::steady_clock sc;
+	//initialize size of stochastic parameters and duals
+	partition = ProblemInstance.partition;
+	//Creating the clock to control the execution time
+	chrono::steady_clock sc;
 	auto start = sc.now();
-    auto end = sc.now();
-    auto time_span = static_cast<chrono::duration<double>>(end - start);
-    execution_time = time_span.count();
-    iterations = 0;
-    GAP = 1;
-    UB = DBL_MAX;
-    LB = 0.0;
-    termination = 9;
+	auto end = sc.now();
+	auto time_span = static_cast<chrono::duration<double>>(end - start);
+	execution_time = time_span.count();
+	iterations = 0;
+	GAP = 1;
+	UB = DBL_MAX;
+	LB = 0.0;
+	termination = 9;
 
-    //subproblem creation
-    cout << "aqui si llega" << endl;
-    ProblemInstance.SPProblemCreation();
+	//subproblem creation
+	ProblemInstance.SPProblemCreation_CPX();
 
-    //main loop of the algorithm
-    while (GAP > GAP_threshold && execution_time < timelimit) {
-        termination = body_gapm(ProblemInstance);
-        //update execution time
-        end = sc.now();
-        auto time_span = static_cast<chrono::duration<double>>(end - start);
-        execution_time = time_span.count();
-        if (termination == 2) {
-            goto outwhile;
-        }
-        //restart vectors
-        cout << endl << "iteration " << iterations << endl << endl;
-        lambda.clear();
-        stoch.clear();
-        lambda.resize(ProblemInstance.nScenarios);
-        stoch.resize(ProblemInstance.nScenarios);
-    }
+	//main loop of the algorithm
+	while (GAP > GAP_threshold && execution_time < timelimit) {
+		termination = body_gapm(ProblemInstance);
+		//update execution time
+		end = sc.now();
+		auto time_span = static_cast<chrono::duration<double>>(end - start);
+		execution_time = time_span.count();
+		if (termination == 2) {
+			goto outwhile;
+		}
+		//restart vectors
+		sp_info.clear();
+		stoch.clear();
+		sp_info_agg.clear();
+		stoch_agg.clear();
+		//sp_info.lambda.resize(ProblemInstance.nScenarios);
+		stoch.resize(ProblemInstance.nScenarios);
+	}
 outwhile:
-    /* DISPLAY */
+	/* DISPLAY */
 	cout << "CRP: "
-	<< termination << " "
-	<< execution_time << " "
-	<< UB << " "
-	<< LB << " "
-	<< (UB - LB) / (1e-10 + LB) << " "
-	<< 0 << " "
-	<< iterations << " "
-	<< partition.size()
-	<< endl;
+		<< termination << " "
+		<< execution_time << " "
+		<< UB << " "
+		<< LB << " "
+		<< (UB - LB) / (1e-10 + LB) << " "
+		<< 0 << " "
+		<< iterations << " "
+		<< partition.size()
+		<< endl;
 }
 template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance);
 
 //This method makes an iteration of the algorithm for a given Master and subproblem
 template <typename T>
-size_t GAPM::body_gapm(T &ProblemInstance){
-    //Update number of iterations 
-    iterations++;
-    //Here we need to create the master problem
-    // Notice, this need s to be created after each iteration because we change both
-    // number of constraints and variables, cplex does not have some of these features
-    bool removeobjs =false;
-    if (iterations > 1) removeobjs =true;
+size_t GAPM::body_gapm(T &ProblemInstance) {
+	//Update number of iterations 
+	iterations++;
+	sp_info.resize(ProblemInstance.nScenarios);
+	stoch.resize(ProblemInstance.nScenarios);
+	//Here we need to create the master problem
+	// Notice, this need s to be created after each iteration because we change both
+	// number of constraints and variables, cplex does not have some of these features
+	cout << "current iteration is " << iterations << endl << endl;
+	bool removeobjs = false;
+	if (iterations > 1) removeobjs = true;
 
-    IloModel master = ProblemInstance.MasterProblemCreation(removeobjs);
+	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs);
 
-    //Solve the master model
-    ProblemInstance.MasterProblemSolution(master, LB, timelimit - execution_time);
+	//Solve the master model
+	ProblemInstance.MasterProblemSolution(master, LB, timelimit - execution_time);
 
-    //Solve every subproblem
-    for (size_t s = 0; s < ProblemInstance.nScenarios; s++){
-        vector<size_t> el(1, s);
-        if (s == 0) {
-            ProblemInstance.SPProblemModification(el, true);
-        } else {
-            ProblemInstance.SPProblemModification(el);
-        }
-        double obj = 0.0;
-        ProblemInstance.SPProbleSolution(stoch[s], lambda[s], obj, el);
-        ProblemInstance.obj_opt_sps[s] = obj;
-    }
+	//Solve every subproblem
+	for (size_t s = 0; s < ProblemInstance.nScenarios; s++) {
+		vector<size_t> el(1, s);
+		sp_info[s].scen = el;
+		if (s == 0) {
+			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen, true);
+		}
+		else {
+			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen);
+		}
+		double obj = 0.0;
+		ProblemInstance.SPProbleSolution_CPX(stoch[s], &sp_info[s]);
+	}
 
-    //Compute the upper bound
-    UB = ProblemInstance.compute_UB();
+	//Compute the upper bound
+	UB = 0;
+	for (size_t i = 0; i < ProblemInstance.nFacilities; i++) {
+		UB += ProblemInstance.x_bar[i] * ProblemInstance.fixed_costs[i];
+	}
 
-    //Update solution Gap
-    compute_gap();
+	for (size_t s = 0; s < ProblemInstance.nScenarios; s++) {
+		UB += ProblemInstance.probability[s] * sp_info[s].obj;
+	}
+	//UB = ProblemInstance.compute_UB(sp_info);
 
-    double continue_algorithm = 9;
-    cout << "THE CURRENT GAP IS " << GAP << endl;
-    if (GAP > GAP_threshold){
-        //run disaggregation procedure locally
-        disaggregation(ProblemInstance.nScenarios);
-        ProblemInstance.partition = partition;
+	//Update solution Gap
+	compute_gap();
 
-        for (size_t s = 0; s < partition.size(); s++) {
-            if (s == 0) {
-                ProblemInstance.SPProblemModification(partition[s], true);
-            } else {
-                ProblemInstance.SPProblemModification(partition[s]);
-            }
-            double obj = 0.0;
-            ProblemInstance.SPProbleSolution(stoch_agg[s], lambda_agg[s], obj, partition[s]);
-        }
+	double continue_algorithm = 9;
+	cout << "THE CURRENT GAP IS " << GAP << endl;
+	if (GAP > GAP_threshold) {
+		//run disaggregation procedure locally
+		disag_procedure to_dis;
+		to_dis.disaggregation(sp_info, partition, ProblemInstance.nScenarios);
+		//reset stoch params agg and dual mult agg
+		stoch_agg.clear();
+		stoch_agg.resize(partition.size());
+		sp_info_agg.clear();
+		sp_info_agg.resize(partition.size());
+		ProblemInstance.partition = partition;
 
-        //run checking stopping criteria
-        bool optimality = stopping_criteria(ProblemInstance.nScenarios, ProblemInstance.probability);
-        if (optimality == true) continue_algorithm = 2;
-    } else {
-        continue_algorithm = 1;
-    }
-    return continue_algorithm;
+		for (size_t s = 0; s < partition.size(); s++) {
+			sp_info_agg[s].scen = partition[s];
+			if (s == 0) {
+				ProblemInstance.SPProblemModification_CPX(partition[s], true);
+			}
+			else {
+				ProblemInstance.SPProblemModification_CPX(partition[s]);
+			}
+			double obj = 0.0;
+			ProblemInstance.SPProbleSolution_CPX(stoch_agg[s], &sp_info_agg[s]);
+		}
+
+		//run checking stopping criteria
+		bool optimality = stopping_criteria(ProblemInstance.nScenarios, ProblemInstance.probability);
+		if (optimality == true) continue_algorithm = 2;
+	}
+	else {
+		continue_algorithm = 1;
+	}
+	return continue_algorithm;
 }
 template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
 
 
-//---------------- TODO include possibility of infeasible subproblems   -------------------//
-
-//function designed to refine the current partition
-void GAPM::disaggregation(const double &nScenarios){
-    //a new partition will be created and will further replace the previous one
-    vector<vector<size_t>> new_partition = refine(nScenarios);
-    partition.clear();
-    partition = new_partition;
-    new_partition.clear();
-    //reset stoch params agg and dual mult agg
-    stoch_agg.clear();
-    stoch_agg.resize(partition.size());
-    lambda_agg.clear();
-    lambda_agg.resize(partition.size());
-    cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
-    for (size_t i = 0; i < partition.size(); i++) {
-		for (size_t j = 0; j < partition[i].size(); j++) {
-			cout << partition[i][j] << ' ';
-		}
-		cout << endl;
-	    //cin.get();
-	}
-}
-
-vector<vector<size_t>> GAPM::refine(const double &nScenarios) {
-    size_t partition_size = partition.size();
-    vector<vector<size_t>> outpart;
-    for (size_t k = 0; k < partition_size; k++) {
-        //Get the refination of element k into the partition
-        vector<vector<size_t>> partial = refine_element(partition[k], nScenarios);
-        //Insert in outpart the vector obtained above
-        size_t tamano = outpart.size();
-        // if k = 0 outpart is empty and will be initialized with partial
-        if (k == 0) {
-            outpart = partial;
-        }
-        // otherwise the data from partial will be pushed back one scenario at a time
-        else {
-            for (size_t la = 0; la < partial.size(); la++) {
-                for (size_t lb = 0; lb < partial[la].size(); lb++) {
-                    if (lb == 0){
-                        outpart.push_back(vector<size_t>( { partial[la][lb] } ));
-                    }
-                    else {
-                        outpart[la + tamano].push_back(partial[la][lb]);
-                    }
-                }
-            }
-            partial.clear();
-        }
-    }
-    return outpart;
-}
-
-//function to refine one element into the partition
-vector<vector<size_t>> GAPM::refine_element(vector<size_t> &element, const double &nScenarios) {
-    //Element size
-    size_t el_size = element.size();
-    //Vector to be returned
-    vector<vector<size_t>> new_element;
-    vector<double> taxicab_computation;
-    vector<double> normtwo_computation;
-    //Iterate through the element to compare the duals of the subproblems
-    for (size_t la = 0; la < el_size; la++) {
-        taxicab_computation.push_back(taxicab(lambda[la]));
-        normtwo_computation.push_back(norm2(lambda[la]));
-        if (la == 0) {
-            new_element.push_back(vector<size_t>( { element[la] } ));
-        }
-        else {
-            size_t tamano = new_element.size();
-            //Create a new loop to compare current values regarding the previous already computed
-            for (size_t lb = 0; lb < tamano; lb++) {
-                bool signal = true;
-                if (fabs(taxicab_computation[la]-taxicab_computation[lb]) < tol_diff_disag && 
-                    fabs(normtwo_computation[la]-normtwo_computation[lb]) < tol_diff_disag) 
-                {
-                    signal = compare_duals(element[la], element[lb]);
-                }
-                // If there is no difference between lambdas, this scenario can be added to the current new element position
-                if (signal == false) {
-                    new_element[lb].push_back(element[la]);
-                    break;
-                }
-                //otherwise, continue checking until the end of the vector
-                //if no coincidence was found, another element is added
-                else {
-                    if (lb == (tamano-1)) {
-                        new_element.push_back(vector<size_t>( { element[la] } ));
-                    }
-                }
-            }
-        }
-    }
-    return new_element;
-}
-
-//function to campare scenarios pairwise (their duals)
-bool GAPM::compare_duals (const size_t &s1, const size_t &s2) {
-    bool signal = false;
-    //Check equality between elements
-    for (size_t j = 0; lambda[s1].size(); j++) {
-        if ( fabs( lambda[s1][j] - lambda[s2][j] ) > tol_diff_disag ) {
-            signal = true;
-            break;
-        }
-    }
-    return signal;
-}
-
-
 void GAPM::compute_gap() {
-    if (UB >= 1e300) {
+	if (UB >= 1e300) {
 		GAP = 1;
 	}
 	else {
@@ -243,24 +151,24 @@ void GAPM::compute_gap() {
 }
 
 bool GAPM::stopping_criteria(const size_t &nScenarios, vector<double> &prob) {
-    bool check_op = true;
-    //aggregated expectation and atomized expectations for each element into the partition are computed
-    for (size_t p = 0; p < partition.size(); p++){
-        double atom_expectation = 0.0;
-        double element_prob = partition[p].size()/nScenarios;
-        double agg_expectation = 0.0;
-        for (size_t j = 0; j < lambda_agg[p].size(); j++) {
-            agg_expectation += (lambda_agg[p][j] * stoch_agg[p][j]);
-            for (size_t s = 0; s < partition[p].size(); s++) {
-                atom_expectation += prob[partition[p][s]] / element_prob * (lambda[partition[p][s]][j] * stoch[partition[p][s]][j]);
-            }
-        }
+	bool check_op = true;
+	//aggregated expectation and atomized expectations for each element into the partition are computed
+	for (size_t p = 0; p < partition.size(); p++) {
+		double atom_expectation = 0.0;
+		double element_prob = partition[p].size() / nScenarios;
+		double agg_expectation = 0.0;
+		for (size_t j = 0; j < sp_info_agg[p].lambda.size(); j++) {
+			agg_expectation += (sp_info_agg[p].lambda[j] * stoch_agg[p][j]);
+			for (size_t s = 0; s < partition[p].size(); s++) {
+				atom_expectation += prob[partition[p][s]] / element_prob * (sp_info[partition[p][s]].lambda[j] * stoch[partition[p][s]][j]);
+			}
+		}
 
-        //check equality of expectations, this is done for each element, when one element does not have the same value, procces is aborted
-        if (fabs(agg_expectation - atom_expectation) > expectation_threshold) {
-            check_op = false;
-            break;
-        }
-    }
-    return check_op;
+		//check equality of expectations, this is done for each element, when one element does not have the same value, procces is aborted
+		if (fabs(agg_expectation - atom_expectation) > expectation_threshold) {
+			check_op = false;
+			break;
+		}
+	}
+	return check_op;
 }

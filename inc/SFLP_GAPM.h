@@ -89,7 +89,7 @@ public:
 	//Solve the subproblem
 	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool = false);
 	//Solve the subproblem
-	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info);
+	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool = false);
 
 	// Given the current x_bar and solution of subprobs, the UB is computed
 	//double compute_UB(vector<solution_sps> &sp_info, double solution_sps::*obj);

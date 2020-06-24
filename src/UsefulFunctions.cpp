@@ -3,6 +3,11 @@
 
 #include"../inc/UsefulFunctions.h"
 
+MyClock::MyClock(void) {
+	start = sc.now();
+	end = sc.now();
+}
+
 template <typename T>
 void read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_inst_name){
     const char* fln = inst_name.c_str();
@@ -81,7 +86,7 @@ void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vecto
 	partition.clear();
 	partition = new_partition;
 	new_partition.clear();
-	cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
+	cout << "the size of the partition now is " << partition.size() << endl;
 	/*for (size_t i = 0; i < partition.size(); i++) {
 		for (size_t j = 0; j < partition[i].size(); j++) {
 			cout << partition[i][j] << ' ';

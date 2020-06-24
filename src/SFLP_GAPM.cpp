@@ -150,6 +150,7 @@ void SFLP_GAPM::MasterProblemSolution(IloModel &master, double &LB, const double
 
 	//Solving
 	cplex_master.extract(master);
+	//cplex_master.exportModel("mastergapm.lp");
 	cplex_master.solve();
 
 	// Solution recovery
@@ -249,10 +250,10 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 	//Setting up cplex
 	IloCplex cplex_sp(SFLP_sp_cpx);
 	//cplex_sp.setParam(IloCplex::RootAlg, IloCplex::Primal);
-	cplex_sp.setParam(IloCplex::PreInd, 0);
+	//cplex_sp.setParam(IloCplex::PreInd, 0);
 	cplex_sp.setOut(SFLP_sp_cpx.getNullStream());
 	cplex_sp.extract(subprob_cpx);
-	cplex_sp.exportModel("prueba_subproblem.lp");
+	//cplex_sp.exportModel("prueba_subproblem.lp");
 	cplex_sp.solve();
 
 	stoch.clear();
@@ -277,6 +278,7 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 		cerr << "Optimal solution of the problem was not found!" << endl;
 	}
 	sp_info->obj = cplex_sp.getObjValue();
+	cplex_sp.end();
 }
 
 
@@ -399,7 +401,7 @@ void SFLP_GAPM::SPProblemModification_GRB(vector<size_t> &element, bool mod_x) {
 }
 
 //Solving the subproblem via Gurobi
-void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info) {
+void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool benders) {
 	//Setting up the configuration of gurobi
 	subprob_grb.set(GRB_IntParam_Method, 0);
 	subprob_grb.set(GRB_IntParam_Presolve, 0);
@@ -419,6 +421,11 @@ void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_inf
 			vector<double> elem_demand = expected_demand(sp_info->scen);
 			stoch.push_back(elem_demand[j]);
 			sp_info->lambda.push_back(subprob_grb.getConstrByName(Label_demconst[j].c_str()).get(GRB_DoubleAttr_Pi));
+		}
+		if (benders) {
+			for (size_t i = 0; i < nFacilities; i++) {
+				sp_info->lambda.push_back(subprob_grb.getConstrByName(Label_capconst[i].c_str()).get(GRB_DoubleAttr_Pi));
+			}
 		}
 		sp_info->obj = subprob_grb.get(GRB_DoubleAttr_ObjVal);
 	}

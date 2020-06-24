@@ -16,6 +16,7 @@ struct entitiesBendSFLP {
     //Variables
 	IloNumVarArray x;
 	IloNumVarArray theta;
+	IloNumVarArray2 y;
 	//Objective
 	IloExpr objective;
 	//Constraints
@@ -42,7 +43,13 @@ public:
     BendersSFLP() = default;
 
     //Create Master Problem
-    void CreateMaster();
+    void CreateMaster(const char &algo);
+
+	//Recovering solution information
+	void RecoverSolution(IloCplex &master_cpx);
+
+	//Printing the solution
+	void PrintSolution(solFeat &org);
 
     //compute left hand size of a cut (single or aggregated) constant
     vector<double> lhs;
@@ -55,6 +62,14 @@ public:
 
 	//Master model
 	IloModel Mast_mod = IloModel(Mast_Bend);
+
+	//Solution info
+	double obj_fin;
+	double LB;
+	double GAP;
+	size_t status;
+	size_t exploredNodes;
+	double cpx_runtime;
 };
 
 #endif

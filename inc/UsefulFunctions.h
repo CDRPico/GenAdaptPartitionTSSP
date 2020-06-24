@@ -7,14 +7,38 @@ using namespace std;
 #include<random>
 #include<sstream>
 #include"SFLP_GAPM.h"
+#include<chrono>
 
 #define tolabscuts		1e-10
 #define tolrelcuts		1e-4
 #define timelimit		21600
 #define tol_diff_disag	1e-4
+#define timeslot		60
 
 #ifndef USF_H
 #define USF_H
+
+class MyClock
+{
+public:
+	chrono::steady_clock sc;
+	chrono::steady_clock::time_point start;
+	chrono::steady_clock::time_point end;
+	MyClock();
+};
+
+struct solFeat {
+	char algo;
+	double feasCuts = 0;
+	double optCuts = 0;
+	size_t cnode = 0;
+	size_t depth = 0;
+	double user_feasCuts = 0;
+	double user_optCuts = 0;
+
+
+	solFeat() = default;
+};
 
 //Subproblem info solution
 struct solution_sps {

@@ -23,6 +23,8 @@ struct entitiesBendSFLP {
 	IloRangeArray Feasibility;
 };
 
+class OuterBendersSFLP;
+
 class BendersSFLP : public SFLP_GAPM
 {
 public:
@@ -64,6 +66,7 @@ public:
 	IloModel Mast_mod = IloModel(Mast_Bend);
 
 	//Solution info
+	vector<double> avg_scenarios;
 	double obj_fin;
 	double LB;
 	double GAP;
@@ -71,5 +74,14 @@ public:
 	size_t exploredNodes;
 	double cpx_runtime;
 };
+
+template<typename T>
+void AddVarsMaster (T &BendersProb, const char &algo);
+
+template<typename T>
+void ValidInequalities (T &BendersProb, const char &algo);
+
+template<typename T>
+void FeasibilityConstraint(T &BendersProb);
 
 #endif

@@ -6,7 +6,7 @@
 #include <chrono>
 
 template<typename T>
-void GAPM::gapm_algorithm(T &ProblemInstance) {
+void GAPM::gapm_algorithm(T &ProblemInstance, const char &algo) {
 	//initialize size of stochastic parameters and duals
 	partition = ProblemInstance.partition;
 	//Creating the clock to control the execution time
@@ -26,7 +26,7 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
 
 	//main loop of the algorithm
 	while (GAP > GAP_threshold && execution_time < timelimit) {
-		termination = body_gapm(ProblemInstance);
+		termination = body_gapm(ProblemInstance, algo);
 		//update execution time
 		end = sc.now();
 		auto time_span = static_cast<chrono::duration<double>>(end - start);
@@ -55,11 +55,11 @@ outwhile:
 		<< partition.size()
 		<< endl;
 }
-template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance);
+template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance, const char &algo);
 
 //This method makes an iteration of the algorithm for a given Master and subproblem
 template <typename T>
-size_t GAPM::body_gapm(T &ProblemInstance) {
+size_t GAPM::body_gapm(T &ProblemInstance, const char &algo) {
 	//Update number of iterations 
 	iterations++;
 	sp_info.resize(ProblemInstance.nScenarios);
@@ -71,7 +71,7 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	bool removeobjs = false;
 	if (iterations > 1) removeobjs = true;
 
-	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs);
+	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs, algo);
 
 	//Solve the master model
 	ProblemInstance.MasterProblemSolution(master, LB, timelimit - execution_time);
@@ -138,7 +138,7 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	}
 	return continue_algorithm;
 }
-template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
+template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance, const char &algo);
 
 
 void GAPM::compute_gap() {

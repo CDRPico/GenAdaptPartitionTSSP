@@ -39,7 +39,7 @@ vector<double> SFLP_GAPM::expected_demand(vector<size_t> &element) {
 
 
 //Create and solve master problem given a certain partition
-IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
+IloCplex SFLP_GAPM::MasterProblemCreation(const char &algo, bool removeobjs)
 {
 	size_t total_elements = partition.size();
 	//Master env
@@ -136,20 +136,19 @@ IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
 	catch (...) {
 		cerr << "Other Exception" << endl;
 	}
-	return master;
+	IloCplex cplex_master(SFLP);
+	return cplex_master;
 }
 
-void SFLP_GAPM::MasterProblemSolution(IloModel &master, double &LB, const double &TL)
+void SFLP_GAPM::MasterProblemSolution(IloCplex &cplex_master, double &LB, const double &TL)
 {
 	//Setting up cplex
-	IloEnv SFLP = master.getEnv();
-	IloCplex cplex_master(SFLP);
 	cplex_master.setParam(IloCplex::Param::Threads, 1);
 	cplex_master.setParam(IloCplex::Param::TimeLimit, TL);
 	cplex_master.setParam(IloCplex::Param::Benders::Strategy, 3);
 
 	//Solving
-	cplex_master.extract(master);
+	cplex_master.extract(cplex_master.getModel());
 	//cplex_master.exportModel("mastergapm.lp");
 	cplex_master.solve();
 

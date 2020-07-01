@@ -71,10 +71,10 @@ public:
 	vector<double> expected_demand(vector<size_t> &element);
 
 	//Create master problem given a certain partition
-	IloModel MasterProblemCreation(bool = false);
+	IloCplex MasterProblemCreation(const char &algo, bool = false);
 
 	// Solve master problem given a certain partition
-	void MasterProblemSolution(IloModel &master, double &LB, const double &TL);
+	void MasterProblemSolution(IloCplex &cplex_master, double &LB, const double &TL);
 
 	//Create the subproblem CPLEX
 	void SPProblemCreation_CPX();

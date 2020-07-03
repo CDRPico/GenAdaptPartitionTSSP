@@ -2,6 +2,15 @@
 // 11/06/2020 14:06
 
 #include"../inc/UsefulFunctions.h"
+#include"../inc/SFLP_GAPM.h"
+#include"../inc/BendersAPM_SFLP.h"
+#include"../inc/OuterBendersSFLP.h"
+
+MyClock::MyClock(void) {
+	start = sc.now();
+	end = sc.now();
+}
+
 
 template <typename T>
 void read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_inst_name){
@@ -81,7 +90,7 @@ void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vecto
 	partition.clear();
 	partition = new_partition;
 	new_partition.clear();
-	cout << endl << endl << "the size of the partition now is " << partition.size() << endl << endl;
+	cout << "the size of the partition now is " << partition.size() << endl;
 	/*for (size_t i = 0; i < partition.size(); i++) {
 		for (size_t j = 0; j < partition[i].size(); j++) {
 			cout << partition[i][j] << ' ';
@@ -183,3 +192,135 @@ bool disag_procedure::compare_duals(solution_sps &sp_info_s1, solution_sps &sp_i
 }
 
 disag_procedure::~disag_procedure() {};
+
+
+template<class T>
+void AddVarsMaster(T &BendersProb, const char &algo) {
+	size_t nscen = 0;
+	if (algo == 's') {
+		nscen = 1;
+	}
+	else {
+		nscen = BendersProb.nScenarios;
+	}
+
+	BendersProb.avg_scenarios.resize(BendersProb.nClients);
+	BendersProb.avg_scenarios = BendersProb.expected_demand(BendersProb.partition[0]);
+
+	if (algo != 'a') {
+		BendersProb.partition.clear();
+		for (size_t s = 0; s < BendersProb.nScenarios; s++) {
+			BendersProb.partition.push_back(vector<size_t>({ s }));
+		}
+	}
+
+	//Declaring variables
+	BendersProb.ent_sflp.x = IloNumVarArray(BendersProb.Mast_Bend, BendersProb.nFacilities);
+	BendersProb.ent_sflp.objective = IloExpr(BendersProb.Mast_Bend);
+	for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+		BendersProb.ent_sflp.x[i] = IloNumVar(BendersProb.Mast_Bend, 0.0, 1.0, ILOINT);
+		BendersProb.Mast_mod.add(BendersProb.ent_sflp.x[i]);
+		BendersProb.ent_sflp.objective += BendersProb.fixed_costs[i] * BendersProb.ent_sflp.x[i];
+	}
+
+	BendersProb.ent_sflp.theta = IloNumVarArray(BendersProb.Mast_Bend, nscen);
+	for (size_t s = 0; s < nscen; s++) {
+		BendersProb.ent_sflp.theta[s] = IloNumVar(BendersProb.Mast_Bend, 0.0, DBL_MAX, ILOFLOAT);
+		BendersProb.Mast_mod.add(BendersProb.ent_sflp.theta[s]);
+		if (nscen != 1) {
+			BendersProb.ent_sflp.objective += BendersProb.probability[s] * BendersProb.ent_sflp.theta[s];
+		}
+	}
+	if (algo == 's') {
+		BendersProb.ent_sflp.objective += BendersProb.ent_sflp.theta[0];
+	}
+
+
+	//Add objective function
+	BendersProb.Mast_mod.add(IloMinimize(BendersProb.Mast_Bend, BendersProb.ent_sflp.objective));
+}
+template void AddVarsMaster<BendersSFLP>(BendersSFLP &BendersProb, const char &algo);
+template void AddVarsMaster<OuterBendersSFLP>(OuterBendersSFLP &BendersProb, const char &algo);
+
+//Add constraints for the average scenario
+template<class T>
+void ValidInequalities(T &BendersProb, const char &algo) {
+	BendersProb.ent_sflp.y = IloNumVarArray2(BendersProb.Mast_Bend, BendersProb.nFacilities);
+	for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+		BendersProb.ent_sflp.y[i] = IloNumVarArray(BendersProb.Mast_Bend, BendersProb.nClients);
+		for (size_t j = 0; j < BendersProb.nClients; j++) {
+			BendersProb.ent_sflp.y[i][j] = IloNumVar(BendersProb.Mast_Bend, 0.0, DBL_MAX, ILOFLOAT);
+			BendersProb.Mast_mod.add(BendersProb.ent_sflp.y[i][j]);
+		}
+	}
+	//Adding constraint to average demand
+	IloRangeArray avg_dem_cons(BendersProb.Mast_Bend);
+	for (size_t j = 0; j < BendersProb.nClients; j++) {
+		//LHS
+		IloExpr constr1(BendersProb.Mast_Bend);
+		for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+			constr1 += BendersProb.ent_sflp.y[i][j];
+		}
+		//Adding the constraint
+		avg_dem_cons.add(constr1 >= BendersProb.avg_scenarios[j]);
+		//remove linear expression
+		constr1.end();
+	}
+	BendersProb.Mast_mod.add(avg_dem_cons);
+
+	IloRangeArray avg_cap_cons(BendersProb.Mast_Bend);
+	for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+		//RHS
+		IloExpr constr2(BendersProb.Mast_Bend);
+		for (size_t j = 0; j < BendersProb.nClients; j++) {
+			constr2 += BendersProb.ent_sflp.y[i][j];
+		}
+		//RHS
+		//Adding the constraint
+		constr2 -= BendersProb.ent_sflp.x[i] * BendersProb.facil_capacities[i];
+		avg_cap_cons.add(constr2 <= 0);
+		//Remove the linear expression
+		constr2.end();
+	}
+	BendersProb.Mast_mod.add(avg_cap_cons);
+
+	IloExpr Avg_cons(BendersProb.Mast_Bend);
+	IloRangeArray AVG(BendersProb.Mast_Bend);
+
+	for (size_t j = 0; j < BendersProb.nClients; j++) {
+		for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+			Avg_cons -= BendersProb.dist_costs[i][j] * BendersProb.ent_sflp.y[i][j];
+		}
+	}
+	if (algo == 's') {
+		Avg_cons += BendersProb.ent_sflp.theta[0];
+	}
+	else {
+		for (size_t s = 0; s < BendersProb.nScenarios; s++) {
+			Avg_cons += BendersProb.probability[s] * BendersProb.ent_sflp.theta[s];
+		}
+	}
+	AVG.add(Avg_cons >= 0);
+	Avg_cons.end();
+	BendersProb.Mast_mod.add(AVG);
+}
+template void ValidInequalities<BendersSFLP>(BendersSFLP &BendersProb, const char &algo);
+template void ValidInequalities<OuterBendersSFLP>(OuterBendersSFLP &BendersProb, const char &algo);
+
+
+template<class T>
+void FeasibilityConstraint(T &BendersProb) {
+	BendersProb.ent_sflp.Feasibility = IloRangeArray(BendersProb.Mast_Bend);
+	//Feasibility constraint
+		//LHS
+	IloExpr constr3(BendersProb.Mast_Bend);
+	for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+		constr3 += BendersProb.facil_capacities[i] * BendersProb.ent_sflp.x[i];
+	}
+	//the constraint
+	BendersProb.ent_sflp.Feasibility.add(constr3 >= BendersProb.max_dem);
+	BendersProb.Mast_mod.add(BendersProb.ent_sflp.Feasibility);
+	constr3.end();
+}
+template void FeasibilityConstraint<BendersSFLP>(BendersSFLP &BendersProb);
+template void FeasibilityConstraint<OuterBendersSFLP>(OuterBendersSFLP &BendersProb);

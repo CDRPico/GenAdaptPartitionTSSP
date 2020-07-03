@@ -6,7 +6,7 @@
 #include <chrono>
 
 template<typename T>
-void GAPM::gapm_algorithm(T &ProblemInstance) {
+void GAPM::gapm_algorithm(T &ProblemInstance, const char &algo) {
 	//initialize size of stochastic parameters and duals
 	partition = ProblemInstance.partition;
 	//Creating the clock to control the execution time
@@ -22,11 +22,11 @@ void GAPM::gapm_algorithm(T &ProblemInstance) {
 	termination = 9;
 
 	//subproblem creation
-	ProblemInstance.SPProblemCreation_CPX();
+	ProblemInstance.SPProblemCreation_GRB();
 
 	//main loop of the algorithm
 	while (GAP > GAP_threshold && execution_time < timelimit) {
-		termination = body_gapm(ProblemInstance);
+		termination = body_gapm(ProblemInstance, algo);
 		//update execution time
 		end = sc.now();
 		auto time_span = static_cast<chrono::duration<double>>(end - start);
@@ -50,16 +50,16 @@ outwhile:
 		<< UB << " "
 		<< LB << " "
 		<< (UB - LB) / (1e-10 + LB) << " "
-		<< 0 << " "
-		<< iterations << " "
+		<< iterations << " " //iterations rather than explored nodes
+		<< 0 << " " //No pending nodes to be explored
 		<< partition.size()
 		<< endl;
 }
-template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance);
+template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance, const char &algo);
 
 //This method makes an iteration of the algorithm for a given Master and subproblem
 template <typename T>
-size_t GAPM::body_gapm(T &ProblemInstance) {
+size_t GAPM::body_gapm(T &ProblemInstance, const char &algo) {
 	//Update number of iterations 
 	iterations++;
 	sp_info.resize(ProblemInstance.nScenarios);
@@ -71,23 +71,25 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	bool removeobjs = false;
 	if (iterations > 1) removeobjs = true;
 
-	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs);
+	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs, algo);
+	IloCplex cplex_master(master.getEnv());
+	//IloCplex* cplex_pointer = &cple
 
 	//Solve the master model
-	ProblemInstance.MasterProblemSolution(master, LB, timelimit - execution_time);
+	ProblemInstance.MasterProblemSolution(&cplex_master, master, LB, timelimit - execution_time);
 
 	//Solve every subproblem
 	for (size_t s = 0; s < ProblemInstance.nScenarios; s++) {
 		vector<size_t> el(1, s);
 		sp_info[s].scen = el;
 		if (s == 0) {
-			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen, true);
+			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen, true);
 		}
 		else {
-			ProblemInstance.SPProblemModification_CPX(sp_info[s].scen);
+			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen);
 		}
 		double obj = 0.0;
-		ProblemInstance.SPProbleSolution_CPX(stoch[s], &sp_info[s]);
+		ProblemInstance.SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
 	}
 
 	//Compute the upper bound
@@ -120,13 +122,13 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 		for (size_t s = 0; s < partition.size(); s++) {
 			sp_info_agg[s].scen = partition[s];
 			if (s == 0) {
-				ProblemInstance.SPProblemModification_CPX(partition[s], true);
+				ProblemInstance.SPProblemModification_GRB(partition[s], true);
 			}
 			else {
-				ProblemInstance.SPProblemModification_CPX(partition[s]);
+				ProblemInstance.SPProblemModification_GRB(partition[s]);
 			}
 			double obj = 0.0;
-			ProblemInstance.SPProbleSolution_CPX(stoch_agg[s], &sp_info_agg[s]);
+			ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s]);
 		}
 
 		//run checking stopping criteria
@@ -138,7 +140,7 @@ size_t GAPM::body_gapm(T &ProblemInstance) {
 	}
 	return continue_algorithm;
 }
-template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance);
+template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance, const char &algo);
 
 
 void GAPM::compute_gap() {

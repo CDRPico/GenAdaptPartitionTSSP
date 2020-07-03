@@ -39,7 +39,7 @@ vector<double> SFLP_GAPM::expected_demand(vector<size_t> &element) {
 
 
 //Create and solve master problem given a certain partition
-IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
+IloModel SFLP_GAPM::MasterProblemCreation(const char &algo, bool removeobjs)
 {
 	size_t total_elements = partition.size();
 	//Master env
@@ -139,28 +139,27 @@ IloModel SFLP_GAPM::MasterProblemCreation(bool removeobjs)
 	return master;
 }
 
-void SFLP_GAPM::MasterProblemSolution(IloModel &master, double &LB, const double &TL)
+void SFLP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, double &LB, const double &TL)
 {
 	//Setting up cplex
-	IloEnv SFLP = master.getEnv();
-	IloCplex cplex_master(SFLP);
-	cplex_master.setParam(IloCplex::Param::Threads, 1);
-	cplex_master.setParam(IloCplex::Param::TimeLimit, TL);
-	cplex_master.setParam(IloCplex::Param::Benders::Strategy, 3);
+	cplex_master->setParam(IloCplex::Param::Threads, 1);
+	cplex_master->setParam(IloCplex::Param::TimeLimit, TL);
+	cplex_master->setParam(IloCplex::Param::Benders::Strategy, 3);
 
 	//Solving
-	cplex_master.extract(master);
-	cplex_master.solve();
+	cplex_master->extract(master);
+	//cplex_master->exportModel("mastergapm.lp");
+	cplex_master->solve();
 
 	// Solution recovery
 	x_bar.resize(nFacilities);
 	for (size_t i = 0; i < nFacilities; i++) {
-		x_bar[i] = cplex_master.getValue(master_entities.x[i]);
+		x_bar[i] = cplex_master->getValue(master_entities.x[i]);
 		if (x_bar[i] > 0)
 			cout << "Facility " << (i + 1) << " will be open" << endl;
 	}
 
-	LB = cplex_master.getObjValue();
+	LB = cplex_master->getObjValue();
 
 }
 
@@ -249,10 +248,10 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 	//Setting up cplex
 	IloCplex cplex_sp(SFLP_sp_cpx);
 	//cplex_sp.setParam(IloCplex::RootAlg, IloCplex::Primal);
-	cplex_sp.setParam(IloCplex::PreInd, 0);
+	//cplex_sp.setParam(IloCplex::PreInd, 0);
 	cplex_sp.setOut(SFLP_sp_cpx.getNullStream());
 	cplex_sp.extract(subprob_cpx);
-	cplex_sp.exportModel("prueba_subproblem.lp");
+	//cplex_sp.exportModel("prueba_subproblem.lp");
 	cplex_sp.solve();
 
 	stoch.clear();
@@ -277,6 +276,7 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 		cerr << "Optimal solution of the problem was not found!" << endl;
 	}
 	sp_info->obj = cplex_sp.getObjValue();
+	cplex_sp.end();
 }
 
 
@@ -399,7 +399,7 @@ void SFLP_GAPM::SPProblemModification_GRB(vector<size_t> &element, bool mod_x) {
 }
 
 //Solving the subproblem via Gurobi
-void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info) {
+void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool benders) {
 	//Setting up the configuration of gurobi
 	subprob_grb.set(GRB_IntParam_Method, 0);
 	subprob_grb.set(GRB_IntParam_Presolve, 0);
@@ -415,10 +415,21 @@ void SFLP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_inf
 	sp_info->F = subprob_grb.get(GRB_IntAttr_Status);
 	//If optimal, get duals
 	if (sp_info->F == 2) {
+		//cout << "Dual multipliers of demand constr ";
 		for (size_t j = 0; j < nClients; j++) {
 			vector<double> elem_demand = expected_demand(sp_info->scen);
 			stoch.push_back(elem_demand[j]);
 			sp_info->lambda.push_back(subprob_grb.getConstrByName(Label_demconst[j].c_str()).get(GRB_DoubleAttr_Pi));
+			//cout << sp_info->lambda.back() << " ";
+		}
+		//cout << endl;
+		if (benders) {
+			//cout << "Dual multipliers of cap constr: ";
+			for (size_t i = 0; i < nFacilities; i++) {
+				sp_info->lambda.push_back(subprob_grb.getConstrByName(Label_capconst[i].c_str()).get(GRB_DoubleAttr_Pi));
+				//cout << sp_info->lambda.back() << " ";
+			}
+			//cout << endl;
 		}
 		sp_info->obj = subprob_grb.get(GRB_DoubleAttr_ObjVal);
 	}

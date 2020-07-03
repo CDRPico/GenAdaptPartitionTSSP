@@ -2,19 +2,62 @@
 // 11/06/2020 14:05
 
 using namespace std;
+
+#ifndef USF_H
+#define USF_H
+
 #include<vector>
 #include<iostream>
 #include<random>
 #include<sstream>
-#include"SFLP_GAPM.h"
+#include<chrono>
+#include"ilcplex/ilocplex.h"
+#include"ilconcert/iloiterator.h"
 
 #define tolabscuts		1e-10
 #define tolrelcuts		1e-4
 #define timelimit		21600
 #define tol_diff_disag	1e-4
+#define timeslot		60
 
-#ifndef USF_H
-#define USF_H
+//Useful Definitions CPLEX
+typedef IloArray<IloNumVarArray> IloNumVarArray2;
+typedef IloArray<IloNumVarArray2> IloNumVarArray3;
+
+
+struct entitiesBendSFLP {
+	//Variables
+	IloNumVarArray x;
+	IloNumVarArray theta;
+	IloNumVarArray2 y;
+	//Objective
+	IloExpr objective;
+	//Constraints
+	IloRangeArray Feasibility;
+};
+
+
+class MyClock
+{
+public:
+	chrono::steady_clock sc;
+	chrono::steady_clock::time_point start;
+	chrono::steady_clock::time_point end;
+	MyClock();
+};
+
+struct solFeat {
+	char algo;
+	double feasCuts = 0;
+	double optCuts = 0;
+	size_t cnode = 0;
+	size_t depth = 0;
+	double user_feasCuts = 0;
+	double user_optCuts = 0;
+
+
+	solFeat() = default;
+};
 
 //Subproblem info solution
 struct solution_sps {
@@ -30,8 +73,6 @@ struct solution_sps {
 	//dual multipliers of key constraints
 	vector<double> lambda;
 };
-
-class SFLP_GAPM;
 
 class disag_procedure 
 {
@@ -64,5 +105,16 @@ double norm2(vector<double> &vect);
 double max_demand(vector<vector<double>> &stoch_dem);
 
 bool smallerWithTolerance(double smaller, double larger);
+
+
+template<class T>
+void AddVarsMaster(T &BendersProb, const char &algo);
+
+template<class T>
+void ValidInequalities(T &BendersProb, const char &algo);
+
+template<class T>
+void FeasibilityConstraint(T &BendersProb);
+
 
 #endif

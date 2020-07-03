@@ -29,10 +29,6 @@ struct SubProblem_GRB {
 	SubProblem_GRB() = default;
 };
 
-//Useful Definitions CPLEX
-typedef IloArray<IloNumVarArray> IloNumVarArray2;
-typedef IloArray<IloNumVarArray2> IloNumVarArray3;
-
 struct Master_CPX {
 	//Variables
 	IloNumVarArray x;
@@ -71,10 +67,10 @@ public:
 	vector<double> expected_demand(vector<size_t> &element);
 
 	//Create master problem given a certain partition
-	IloModel MasterProblemCreation(bool = false);
+	IloModel MasterProblemCreation(const char &algo, bool = false);
 
 	// Solve master problem given a certain partition
-	void MasterProblemSolution(IloModel &master, double &LB, const double &TL);
+	void MasterProblemSolution(IloCplex *cplex_master, IloModel &master, double &LB, const double &TL);
 
 	//Create the subproblem CPLEX
 	void SPProblemCreation_CPX();
@@ -89,7 +85,7 @@ public:
 	//Solve the subproblem
 	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool = false);
 	//Solve the subproblem
-	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info);
+	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool = false);
 
 	// Given the current x_bar and solution of subprobs, the UB is computed
 	//double compute_UB(vector<solution_sps> &sp_info, double solution_sps::*obj);

@@ -44,11 +44,11 @@ public:
 
 	//Function to run the entire algorithm
 	template<typename T>
-	void gapm_algorithm(T &ProblemInstance);
+	void gapm_algorithm(T &ProblemInstance, const char &algo);
 
 	//Function to do an iteration of the algorithm
 	template<typename T>
-	size_t body_gapm(T &ProblemInstance);
+	size_t body_gapm(T &ProblemInstance, const char &algo);
 
 	//Compute the current solution GAP
 	void compute_gap();

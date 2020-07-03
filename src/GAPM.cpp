@@ -3,6 +3,7 @@
 
 #include"../inc/GAPM.h"
 #include"../inc/SFLP_GAPM.h"
+#include"../inc/OuterBendersSFLP.h"
 #include <chrono>
 
 template<typename T>
@@ -21,12 +22,21 @@ void GAPM::gapm_algorithm(T &ProblemInstance, const char &algo) {
 	LB = 0.0;
 	termination = 9;
 
+	//create master for outer benders
+	IloModel master = ProblemInstance.MasterProblemCreation(removeobjs, algo);
+	IloCplex cplex_master(master.getEnv());
+
 	//subproblem creation
 	ProblemInstance.SPProblemCreation_GRB();
 
 	//main loop of the algorithm
 	while (GAP > GAP_threshold && execution_time < timelimit) {
-		termination = body_gapm(ProblemInstance, algo);
+		if (algo == 'n') {
+			termination = body_gapm(ProblemInstance, algo);
+		} else {
+			termination = body_gapm_outben(ProblemInstance, &cplex_master, master, algo);
+		}
+		
 		//update execution time
 		end = sc.now();
 		auto time_span = static_cast<chrono::duration<double>>(end - start);
@@ -56,6 +66,7 @@ outwhile:
 		<< endl;
 }
 template void GAPM::gapm_algorithm(SFLP_GAPM &ProblemInstance, const char &algo);
+template void GAPM::gapm_algorithm(OuterBendersSFLP &ProblemInstance, const char &algo);
 
 //This method makes an iteration of the algorithm for a given Master and subproblem
 template <typename T>
@@ -142,6 +153,97 @@ size_t GAPM::body_gapm(T &ProblemInstance, const char &algo) {
 }
 template size_t GAPM::body_gapm(SFLP_GAPM &ProblemInstance, const char &algo);
 
+//This method makes an iteration of the algorithm for a given Master and subproblem
+//Outer Benders
+template <typename T>
+size_t GAPM::body_gapm_outben(T &ProblemInstance,IloCplex *cplex_master, IloModel &master, const char &algo) {
+	//Update number of iterations 
+	iterations++;
+	sp_info.resize(ProblemInstance.nScenarios);
+	stoch.resize(ProblemInstance.nScenarios);
+	//Here we need to create the master problem
+	// Notice, this need s to be created after each iteration because we change both
+	// number of constraints and variables, cplex does not have some of these features
+	cout << "current iteration is " << iterations << endl << endl;
+	bool removeobjs = false;
+	if (iterations > 1) removeobjs = true;
+
+	//Modify and Solve the master model
+	ProblemInstance.MasterProblemModification(&cplex_master, master, algo);
+	ProblemInstance.MasterProblemSolution(&cplex_master, master, LB, timelimit - execution_time);
+
+	bool violated = false;
+	//Solve every subproblem
+	for (size_t s = 0; s < ProblemInstance.nScenarios; s++) {
+		vector<size_t> el(1, s);
+		sp_info[s].scen = el;
+		if (s == 0) {
+			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen, true);
+		}
+		else {
+			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen);
+		}
+		double obj = 0.0;
+		ProblemInstance.SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
+	}
+
+	//Compute the upper bound
+	UB = 0;
+	for (size_t i = 0; i < ProblemInstance.nFacilities; i++) {
+		UB += ProblemInstance.x_bar[i] * ProblemInstance.fixed_costs[i];
+	}
+
+	for (size_t s = 0; s < ProblemInstance.nScenarios; s++) {
+		UB += ProblemInstance.probability[s] * sp_info[s].obj;
+	}
+	//UB = ProblemInstance.compute_UB(sp_info);
+
+	//Update solution Gap
+	compute_gap();
+
+	double continue_algorithm = 9;
+	cout << "THE CURRENT GAP IS " << GAP << endl;
+	if (GAP > GAP_threshold) {
+		//reset stoch params agg and dual mult agg
+		stoch_agg.clear();
+		stoch_agg.resize(partition.size());
+		sp_info_agg.clear();
+		sp_info_agg.resize(partition.size());
+		ProblemInstance.partition = partition;
+
+		for (size_t s = 0; s < partition.size(); s++) {
+			sp_info_agg[s].scen = partition[s];
+			if (s == 0) {
+				ProblemInstance.SPProblemModification_GRB(partition[s], true);
+			}
+			else {
+				ProblemInstance.SPProblemModification_GRB(partition[s]);
+			}
+			double obj = 0.0;
+			ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s]);
+		}
+
+		ProblemInstance.new_cuts(stoch_agg, &sp_info_agg, violated);
+		if (violated == false) {
+			//run disaggregation procedure locally
+			disag_procedure to_dis;
+			to_dis.disaggregation(sp_info, partition, ProblemInstance.nScenarios);
+		}
+
+		//check current active cuts
+		ProblemInstance.check_active_cuts(stoch, &sp_info);
+		
+
+		//run checking stopping criteria
+		bool optimality = stopping_criteria(ProblemInstance.nScenarios, ProblemInstance.probability);
+		if (optimality == true) continue_algorithm = 2;
+	}
+	else {
+		continue_algorithm = 1;
+	}
+	return continue_algorithm;
+}
+template size_t GAPM::body_gapm(OuterBendersSFLP &ProblemInstance, const char &algo);
 
 void GAPM::compute_gap() {
 	if (UB >= 1e300) {

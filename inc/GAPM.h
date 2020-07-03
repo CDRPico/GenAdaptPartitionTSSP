@@ -50,6 +50,10 @@ public:
 	template<typename T>
 	size_t body_gapm(T &ProblemInstance, const char &algo);
 
+	//outer benders gapm
+	template <typename T>
+	size_t GAPM::body_gapm_outben(T &ProblemInstance,IloCplex *cplex_master, IloModel &master, const char &algo);
+
 	//Compute the current solution GAP
 	void compute_gap();
 

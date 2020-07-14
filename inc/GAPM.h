@@ -9,7 +9,7 @@
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
 #include<vector>
-#include"../inc/UsefulFunctions.h"
+#include"../inc/UsfFunctions.h"
 
 using namespace std;
 

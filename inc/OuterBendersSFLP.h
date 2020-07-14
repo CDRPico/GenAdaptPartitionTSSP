@@ -7,7 +7,7 @@
 #define OuterBendersGAPM
 
 #include"SFLP_GAPM.h"
-#include"UsefulFunctions.h"
+#include"UsfFunctions.h"
 
 struct cut_pool{    
     //CPLEX cuts preserved from one iteration to the next one

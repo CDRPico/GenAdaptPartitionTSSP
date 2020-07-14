@@ -1,32 +1,32 @@
 // Created by CDRPico
-// 11/06/2020 13:47
+// 09/07/2020 05:42
 
 #pragma once
 
-#ifndef SFLP_GAPM_H
-#define SFLP_GAPM_H
+#ifndef SFCMFP_GAPM_H
+#define SFCMFP_GAPM_H
 
 using namespace std;
 
-#include"InstanceSFLP.h"
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
 #include<gurobi_c++.h>
 #include<cfloat>
 #include"UsfFunctions.h"
+#include"InstancesSFCMFP.h"
 
 ILOSTLBEGIN
 
 //Definitions for Gurobi
-struct SubProblem_GRB {
+struct SubProblemMFP_GRB {
 	//Variables
 	GRBVar **y = NULL;
 
-	GRBConstr *dem_constraints = NULL;
+	GRBConstr *flow_constraints = NULL;
 
 	GRBConstr *cap_constraints = NULL;
 
-	SubProblem_GRB() = default;
+	SubProblemMFP_GRB() = default;
 };
 
 struct Master_CPX {
@@ -36,23 +36,12 @@ struct Master_CPX {
 	//Objective
 	IloExpr objective;
 	//Constraints
-	IloRangeArray dem_satisfaction;
-	IloRangeArray linking_constraints;
-	IloRangeArray Feasibility;
-};
-
-struct SubProblem_CPX {
-	//Variables
-	IloNumVarArray2 y;
-	//Objective
-	IloExpr objective;
-	//Constraints
-	IloRangeArray dem_constraints;
+	IloRangeArray flow_satisfaction;
 	IloRangeArray cap_constraints;
 };
 
 
-class SFLP_GAPM : public InstanceSFLP
+class SFCMFP_GAPM : public InstanceSFCMFP
 {
 public:
 	vector<vector<size_t>> partition;
@@ -61,10 +50,10 @@ public:
 	double max_dem;
 
 	//COnstructor takes the name of the instance and the name of the stoch instance
-	SFLP_GAPM(string &inst_name, string &stoch_inst_name);
+	SFCMFP_GAPM(string &inst_name, string &stoch_inst_name);
 
 	//Compute expectation of stochastic parameters
-	vector<double> expected_demand(vector<size_t> &element);
+	vector<double> expected_demand(const vector<size_t> &scenarios);
 
 	//Create master problem given a certain partition
 	IloModel MasterProblemCreation(const char &algo, bool = false);
@@ -73,17 +62,11 @@ public:
 	void MasterProblemSolution(IloCplex *cplex_master, IloModel &master, double &LB, const double &TL);
 
 	//Create the subproblem CPLEX
-	void SPProblemCreation_CPX();
-	//Create the subproblem CPLEX
 	void SPProblemCreation_GRB();
 
 	//Modify the subproblem to solve a different scenario CPLEX
-	void SPProblemModification_CPX(vector<size_t> &element, bool = false);
-	//Modify the subproblem to solve a different scenario CPLEX
 	void SPProblemModification_GRB(vector<size_t> &element, bool = false);
 
-	//Solve the subproblem
-	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool = false);
 	//Solve the subproblem
 	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool = false);
 
@@ -94,22 +77,13 @@ public:
 	void Labeling_y();
 
 	//Labeling demand constraints
-	void Label_demand_constr();
+	void Label_flow_constr();
 	//Labeling capacity constraints
 	void Label_capacity_constr();
 
 protected:
 	//Master entities
 	Master_CPX master_entities;
-
-	//SubProblem env
-	IloEnv SFLP_sp_cpx = IloEnv();
-
-	//Subproblem model
-	IloModel subprob_cpx = IloModel(SFLP_sp_cpx);
-
-	//Subproblem entities CPLEX
-	SubProblem_CPX sp_entities_cpx;
 
 	//Gurobi env
 	GRBEnv SFLP_sp_grb = GRBEnv();
@@ -118,7 +92,7 @@ protected:
 	GRBModel subprob_grb = GRBModel(SFLP_sp_grb);
 
 	//Subproblem entities Gurobi
-	SubProblem_GRB sp_entities_grb;
+	SubProblemMFP_GRB sp_entities_grb;
 
 	//Names second stage variables
 	vector<vector<string>> Label_y;

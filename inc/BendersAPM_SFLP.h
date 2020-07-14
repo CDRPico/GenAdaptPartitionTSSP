@@ -9,7 +9,7 @@
 #include"SFLP_GAPM.h"
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
-#include"UsefulFunctions.h"
+#include"UsfFunctions.h"
 
 ILOSTLBEGIN
 

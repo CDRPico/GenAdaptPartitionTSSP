@@ -1,7 +1,7 @@
 // Created by CDRPico
 // 11/06/2020 14:06
 
-#include"../inc/UsefulFunctions.h"
+#include"../inc/UsfFunctions.h"
 #include"../inc/SFLP_GAPM.h"
 #include"../inc/BendersAPM_SFLP.h"
 #include"../inc/OuterBendersSFLP.h"

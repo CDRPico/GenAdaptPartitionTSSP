@@ -19,6 +19,9 @@ using namespace std;
 #define timelimit		21600
 #define tol_diff_disag	1e-4
 #define timeslot		60
+#define GAP_threshold           1e-3
+#define expectation_threshold   1e-3
+
 
 //Useful Definitions CPLEX
 typedef IloArray<IloNumVarArray> IloNumVarArray2;
@@ -36,6 +39,16 @@ struct entitiesBendSFLP {
 	IloRangeArray Feasibility;
 };
 
+struct entitiesBendCP {
+	//Variables
+	IloNumVarArray x;
+	IloNumVarArray theta;
+	IloNumVarArray y;
+	//Objective
+	IloExpr objective;
+	//Constraints
+	IloRangeArray Feasibility;
+};
 
 class MyClock
 {
@@ -54,7 +67,9 @@ struct solFeat {
 	size_t depth = 0;
 	double user_feasCuts = 0;
 	double user_optCuts = 0;
-
+	vector<double> x_prev;
+	bool part_modified = false;
+	bool x_modified = false;
 
 	solFeat() = default;
 };
@@ -87,6 +102,8 @@ public:
 	vector<vector<size_t>> refine_element(vector<solution_sps> &sp_info,vector<size_t> &element, const double &nScenarios);
 	//function to campare scenarios pairwise (their duals)
 	bool compare_duals(solution_sps &sp_info_s1, solution_sps &sp_info_s2, const size_t &s1, const size_t &s2);
+	//Compute the partition element probs
+	vector<double> compute_part_prob(vector<vector<size_t>> &partition, const double &nScenarios);
 };
 
 //Read instance data
@@ -106,9 +123,14 @@ double max_demand(vector<vector<double>> &stoch_dem);
 
 bool smallerWithTolerance(double smaller, double larger);
 
+bool compareSolutions(vector<double> x_prev, vector<double> cur_x);
+
 
 template<class T>
 void AddVarsMaster(T &BendersProb, const char &algo);
+
+template<class T>
+void AddVarsMaster(T &BendersProb, const char &algo, const char &linear);
 
 template<class T>
 void ValidInequalities(T &BendersProb, const char &algo);
@@ -116,5 +138,8 @@ void ValidInequalities(T &BendersProb, const char &algo);
 template<class T>
 void FeasibilityConstraint(T &BendersProb);
 
+void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices);
+
+bool is_integer(float k);
 
 #endif

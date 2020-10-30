@@ -4,12 +4,13 @@
 #include"../inc/BendersAPM_SFLP.h"
 #include<chrono>
 
-#define DisableCPLEXCuts 1
+#define DisableCPLEXCuts 0
 
-ILOLAZYCONSTRAINTCALLBACK3(LazyOptCuts,
+ILOLAZYCONSTRAINTCALLBACK4(LazyOptCuts,
     BendersSFLP&, Instance,
     solFeat&, org,
-	bool&, first_out)
+	bool&, first_out,
+	const char&, algo)
 {
 	bool reaggregated = false;
 	size_t cont = 0;
@@ -18,6 +19,8 @@ comeback:
 	chrono::steady_clock sc_cut;
 	auto start_cut = sc_cut.now();
 	auto end_cut = sc_cut.now();
+	Instance.sp_info.clear();
+	Instance.stoch.clear();
 	Instance.sp_info.resize(Instance.nScenarios);
 	Instance.stoch.resize(Instance.nScenarios);
     size_t scenarios = 0;
@@ -28,21 +31,30 @@ comeback:
     }
 
     //get current solution
+	// simultaneously check if solution changes regarding prev iteration 
+	org.x_modified = false;
     for (size_t i = 0; i < Instance.nFacilities; i++) {
         Instance.x_bar[i] = getValue(Instance.ent_sflp.x[i]);
+		//cout << "x_" << (i + 1) << " has value " << Instance.x_bar[i] << endl;
+		if (fabs(Instance.x_bar[i] - org.x_prev[i]) > tolabscuts) {
+			org.x_modified = true;
+		}
     }
+	
     vector<double> current_theta(scenarios);
     for (size_t s = 0; s < scenarios; s++) {
         current_theta[s] = getValue(Instance.ent_sflp.theta[s]);
     }
 
     //Important elements for dual values
-    Instance.stoch_agg.clear();
-	Instance.stoch_agg.resize(Instance.partition.size());
-	Instance.sp_info_agg.clear();
-	Instance.sp_info_agg.resize(Instance.partition.size());
-    Instance.lhs.clear();
-    Instance.lhs.resize(Instance.partition.size());
+	if (org.x_modified || org.part_modified) {
+		Instance.stoch_agg.clear();
+		Instance.stoch_agg.resize(Instance.partition.size());
+		Instance.sp_info_agg.clear();
+		Instance.sp_info_agg.resize(Instance.partition.size());
+		Instance.lhs.clear();
+		Instance.lhs.resize(Instance.partition.size());
+	}
 
     //Checking if any cut should added
     bool violated = false;
@@ -52,13 +64,15 @@ comeback:
 
     for (size_t p = 0; p < Instance.partition.size(); p++) {
 		Instance.sp_info_agg[p].scen = Instance.partition[p];
-        if (p == 0) {
-			Instance.SPProblemModification_GRB(Instance.partition[p], true);
+		if (org.part_modified || org.x_modified) {
+			if (org.x_modified) {
+				Instance.SPProblemModification_GRB(Instance.partition[p], true);
+			}
+			else {
+				Instance.SPProblemModification_GRB(Instance.partition[p]);
+			}
+			Instance.SPProbleSolution_GRB(Instance.stoch_agg[p], &Instance.sp_info_agg[p], true);
 		}
-		else {
-			Instance.SPProblemModification_GRB(Instance.partition[p]);
-		}
-		Instance.SPProbleSolution_GRB(Instance.stoch_agg[p], &Instance.sp_info_agg[p], true);
         //Compute the current rhs to check if the cut is violated
         double element_prob = 0.0;
         double theta_ac = 0.0;
@@ -125,11 +139,15 @@ comeback:
 		Instance.partition.push_back(vector<size_t>(create_partition(Instance.nScenarios)));
 	}
 
+	//Here we redefine org.par_modified to know in the future if the partition was modiied or not
+	org.part_modified = false;
 	size_t wherefrom = getSolutionSource();
     if (violated == false && org.algo == 'a' && Instance.partition.size() < Instance.nScenarios){// && wherefrom == CPX_CALLBACK_MIP_INCUMBENT_NODESOLN) {
 		//chrono::steady_clock sc;
 		//auto start = sc.now();
 		//auto end = sc.now();
+		//partition is modified
+		size_t cur_part_size = Instance.partition.size();
         for (size_t s = 0; s < Instance.nScenarios; s++) {
             vector<size_t> el(1, s);
             Instance.sp_info[s].scen = el;
@@ -148,15 +166,22 @@ comeback:
 		//cout << "it takes " << runtime << "to solve " << Instance.nScenarios << " subproblems" << endl;;
         disag_procedure to_dis;
 		to_dis.disaggregation(Instance.sp_info, Instance.partition, Instance.nScenarios);
+		if (cur_part_size != Instance.partition.size()) {
+			org.part_modified = true;
+		}
     }
-	Instance.sp_info.clear();
-	Instance.stoch.clear();
-	Instance.sp_info_agg.clear();
-	Instance.stoch_agg.clear();
+	//Instance.sp_info.clear();
+	//Instance.stoch.clear();
+	//Instance.sp_info_agg.clear();
+	//Instance.stoch_agg.clear();
 	end_cut = sc_cut.now();
 	auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
 	double runtime_cut = time_span_cut.count();
 	cout << "it takes " << runtime_cut << "to execute the lazy callback " << endl;
+	//modified the prev x for future checking if solution changed
+	for (size_t i = 0; i < Instance.nFacilities; i++) {
+		org.x_prev[i] = Instance.x_bar[i];
+	}
 	if (reaggregated == true && cont < 1) {
 		cont++;
 		goto comeback;
@@ -168,6 +193,8 @@ ILOUSERCUTCALLBACK2(UserOptCuts,
 	solFeat&, org)
 {
 	if (org.cnode == 0) {
+		Instance.sp_info.clear();
+		Instance.stoch.clear();
 		Instance.sp_info.resize(Instance.nScenarios);
 		Instance.stoch.resize(Instance.nScenarios);
 		size_t scenarios = 0;
@@ -266,9 +293,7 @@ ILOUSERCUTCALLBACK2(UserOptCuts,
 			add(new_single_cut <= -const_part_single).end();
 			org.user_optCuts += 1;
 		}
-
-		Instance.sp_info.clear();
-		Instance.stoch.clear();
+		
 		Instance.sp_info_agg.clear();
 		Instance.stoch_agg.clear();
 	}	
@@ -343,7 +368,8 @@ ILOMIPINFOCALLBACK7(infocallback_test, vector<vector<size_t>>&, partitions, MyCl
 	}
 }
 
-void BendersSFLP::CreateMaster(const char &algo) {
+double BendersSFLP::CreateMaster(const char &algo, vector<vector<size_t>> &part, vector<double> &xb) {
+	partition = part;
 	//Add variables
 	AddVarsMaster(*this, algo);
 	/*size_t nscen = 0;
@@ -472,6 +498,7 @@ void BendersSFLP::CreateMaster(const char &algo) {
 	org.feasCuts = 0;
 	org.optCuts = 0;
 	org.user_optCuts = 0;
+	org.x_prev.resize(nFacilities, 0.0);
 
     /* Create cplex enviroment to solve the problem */
     IloCplex cplex(Mast_Bend);
@@ -501,6 +528,13 @@ void BendersSFLP::CreateMaster(const char &algo) {
     cplex.extract(Mast_mod);
 	//cplex.exportModel("masterBenders.lp");
 
+	IloNumArray xb_1(Mast_Bend);
+	for (size_t i = 0; i < nFacilities; i++) {
+		xb_1.add(xb[i]);
+	}
+	cplex.addMIPStart(ent_sflp.x, xb_1);
+	xb_1.end();
+
 	auto control_clock = MyClock();
 	size_t current_slot = 0;
 	bool oorootnode = false;
@@ -508,7 +542,7 @@ void BendersSFLP::CreateMaster(const char &algo) {
 
 	bool first_out = false;
 	cplex.use(nodecallback_test(this->Mast_Bend, org.cnode, org.depth));
-    cplex.use(LazyOptCuts(this->Mast_Bend, *this, org, first_out));
+    cplex.use(LazyOptCuts(this->Mast_Bend, *this, org, first_out, algo));
 	cplex.use(UserOptCuts(this->Mast_Bend, *this, org));
 	cplex.use(infocallback_test(this->Mast_Bend, partition, control_clock, current_slot, org.cnode, oorootnode, org, report));
 	
@@ -521,6 +555,8 @@ void BendersSFLP::CreateMaster(const char &algo) {
 
 	//Printing the solution
 	PrintSolution(org);
+	part = partition;
+	return LB;
 }
 
 void BendersSFLP::RecoverSolution(IloCplex &master_cpx) {
@@ -561,3 +597,79 @@ void BendersSFLP::PrintSolution(solFeat &org) {
 		<< endl;
 }
 
+void BendersSFLP::IterativeMaster(const char &algo, string &inst_name, string &stoch_inst_name, vector<vector<size_t>> part) {
+	//Creating the clock to control the execution time
+	chrono::steady_clock sc;
+	auto start = sc.now();
+	auto end = sc.now();
+	auto time_span = static_cast<chrono::duration<double>>(end - start);
+	double execution_time = time_span.count();
+	size_t iterations = 0;
+	GAP = 1;
+	double UB = DBL_MAX;
+	LB = 0.0;
+	double termination = 9;
+	SPProblemCreation_GRB();
+
+	while (GAP > GAP_threshold && execution_time < timelimit) {
+		iterations++;
+		BendersSFLP Instance(inst_name, stoch_inst_name);
+		//Create and run procedure
+		LB = Instance.CreateMaster(algo, part, x_bar);
+		x_bar = Instance.x_bar;
+		stoch.resize(nClients);
+		stoch = Instance.stoch;
+		sp_info.resize(nScenarios);
+		//sp_info = Instance.sp_info;
+
+		for (size_t s = 0; s < nScenarios; s++) {
+			vector<size_t> el(1, s);
+			sp_info[s].scen = el;
+			if (s == 0) {
+				SPProblemModification_GRB(sp_info[s].scen, true);
+			}
+			else {
+				SPProblemModification_GRB(sp_info[s].scen);
+			}
+			double obj = 0.0;
+			SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
+		}
+
+		UB = 0;
+		for (size_t i = 0; i < nFacilities; i++) {
+			UB += x_bar[i] * fixed_costs[i];
+		}
+
+		for (size_t s = 0; s < nScenarios; s++) {
+			UB += probability[s] * sp_info[s].obj;
+		}
+
+		//update execution time
+		end = sc.now();
+		auto time_span = static_cast<chrono::duration<double>>(end - start);
+		execution_time = time_span.count();
+
+		if (GAP > GAP_threshold) {
+			//end = sc.now();
+			//auto time_span = static_cast<chrono::duration<double>>(end - start);
+			//double runtime = time_span.count();
+			//cout << "it takes " << runtime << "to solve " << Instance.nScenarios << " subproblems" << endl;;
+			disag_procedure to_dis;
+			to_dis.disaggregation(sp_info, part, nScenarios);
+		}
+		if (termination == 2) {
+			goto outwhile;
+		}
+	}
+outwhile:
+	/* DISPLAY */
+	cout << "CRP: "
+		<< termination << " "
+		<< execution_time << " "
+		<< UB << " "
+		<< LB << " "
+		<< (UB - LB) / (1e-10 + LB) << " "
+		<< iterations << " " //iterations rather than explored nodes
+		<< 0 << " " //No pending nodes to be explored
+		<< partition.size() << endl;
+}

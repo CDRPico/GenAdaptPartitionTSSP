@@ -21,6 +21,23 @@ SFLP_GAPM::SFLP_GAPM(string &inst_name, string &stoch_inst_name) {
 	max_dem = max_demand(stoch_param);
 }
 
+//Copying information from an instance created in the GAPM to run Benders in the Master Problem of that algorithm
+SFLP_GAPM::SFLP_GAPM(const size_t &nFac, const size_t &nCli, const vector<double> &fc, const vector<vector<double>> &dc,
+	const vector<double> &fcap, const vector<vector<double>> &sto_p, const size_t &nSc, const vector<double> &pr,
+	const vector<double> &xb, const vector<vector<size_t>> &par)
+{
+	nFacilities = nFac;
+	nClients = nCli;
+	fixed_costs = fc;
+	dist_costs = dc;
+	facil_capacities = fcap;
+	stoch_param = sto_p;
+	nScenarios = nSc;
+	probability = pr;
+	x_bar = xb;
+	partition = par;
+}
+
 
 vector<double> SFLP_GAPM::expected_demand(vector<size_t> &element) {
 	vector<double> agg_demand_elem(nClients, 0.0);
@@ -68,7 +85,7 @@ IloModel SFLP_GAPM::MasterProblemCreation(const char &algo, bool removeobjs)
 				for (size_t s = 0; s < total_elements; s++) {
 					master_entities.y[i][j][s] = IloNumVar(SFLP, 0.0, DBL_MAX, ILOFLOAT);
 					master.add(master_entities.y[i][j][s]);
-					double elementProb = double(partition[s].size()) / double(nScenarios);
+					double elementProb = part_prob[s];
 					master_entities.objective += (elementProb * dist_costs[i][j] * master_entities.y[i][j][s]);
 				}
 			}
@@ -291,7 +308,7 @@ void SFLP_GAPM::SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_inf
 			UB_1 += probability[s] * c[s].obj;
 		}
 	}
-	
+
 	return UB_1;
 }*/
 

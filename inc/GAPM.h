@@ -13,15 +13,13 @@
 
 using namespace std;
 
-#define GAP_threshold           1e-3
-#define expectation_threshold   1e-3
-
 class GAPM
 {
 private:
 	/* data */
 public:
 	// Data to store solution information
+	size_t num_stoch_param;
 	size_t termination;
 	double execution_time;
 	size_t iterations;
@@ -44,20 +42,23 @@ public:
 
 	//Function to run the entire algorithm
 	template<typename T>
-	void gapm_algorithm(T &ProblemInstance, const char &algo);
+	void gapm_algorithm(T &ProblemInstance, const char &algo, const size_t &nsp);
 
 	//Function to do an iteration of the algorithm
-	template<typename T>
+	template<class T>
 	size_t body_gapm(T &ProblemInstance, const char &algo);
 
+	template<class T>
+	size_t body_gapm(T &ProblemInstance, const char &algo, vector<double> &prev_x);
+
 	//outer benders gapm
-	template <typename T>
-	size_t GAPM::body_gapm_outben(T &ProblemInstance,IloCplex *cplex_master, IloModel &master, const char &algo);
+	template <class T>
+	size_t body_gapm(T &ProblemInstance, IloCplex *cplex_master, IloModel &master, const char &algo, vector<double> &prev_x, double &prev_lb);
 
 	//Compute the current solution GAP
 	void compute_gap();
 
-	bool stopping_criteria(const size_t &nScenarios, vector<double> &prob);
+	bool stopping_criteria(const size_t &nScenarios, vector<double> &prob, const size_t &stoch_param_num);
 
 };
 

@@ -29,7 +29,7 @@ struct SubProblemMFP_GRB {
 	SubProblemMFP_GRB() = default;
 };
 
-struct Master_CPX {
+struct Master_CPX_SFCMFP {
 	//Variables
 	IloNumVarArray x;
 	IloNumVarArray3 y;
@@ -62,7 +62,7 @@ public:
 	void MasterProblemSolution(IloCplex *cplex_master, IloModel &master, double &LB, const double &TL);
 
 	//Create the subproblem CPLEX
-	void SPProblemCreation_GRB();
+	/*void SPProblemCreation_GRB();
 
 	//Modify the subproblem to solve a different scenario CPLEX
 	void SPProblemModification_GRB(vector<size_t> &element, bool = false);
@@ -79,11 +79,11 @@ public:
 	//Labeling demand constraints
 	void Label_flow_constr();
 	//Labeling capacity constraints
-	void Label_capacity_constr();
+	void Label_capacity_constr();*/
 
 protected:
 	//Master entities
-	Master_CPX master_entities;
+	Master_CPX_SFCMFP master_entities;
 
 	//Gurobi env
 	GRBEnv SFLP_sp_grb = GRBEnv();

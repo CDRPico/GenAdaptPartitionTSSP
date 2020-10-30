@@ -3,8 +3,10 @@
 
 #include"../inc/UsfFunctions.h"
 #include"../inc/SFLP_GAPM.h"
+#include"../inc/SFCMFP_GAPM.h"
 #include"../inc/BendersAPM_SFLP.h"
 #include"../inc/OuterBendersSFLP.h"
+#include"../inc/BendersAPM_CP.h"
 
 MyClock::MyClock(void) {
 	start = sc.now();
@@ -27,6 +29,7 @@ void read_instance_data(T &ProblemInstance, string &inst_name, string &stoch_ins
     ProblemInstance.read_stoch_data(file_stoch);
 }
 template void read_instance_data(SFLP_GAPM &ProblemInstance, string &inst_name, string &stoch_inst_name);
+template void read_instance_data(SFCMFP_GAPM &ProblemInstance, string &inst_name, string &stoch_inst_name);
 
 //suitable function to create the initial partition
 vector<size_t> create_partition(const size_t &Scenarios) {
@@ -83,9 +86,22 @@ bool smallerWithTolerance(double smaller, double larger)
 	return false;
 }
 
+bool compareSolutions(vector<double> x_prev, vector<double> cur_x) {
+	bool r = true;
+	for (size_t i = 0; i < x_prev.size(); i++) {
+		if (fabs(x_prev[i] - cur_x[i]) > tolabscuts) {
+			r = false;
+			break;
+		}
+	}
+	return r;
+}
+
 //function designed to refine the current partition
 void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios) {
 	//a new partition will be created and will further replace the previous one
+	/*partition.clear();
+	partition.push_back(vector<size_t>(create_partition(nScenarios)));*/
 	vector<vector<size_t>> new_partition = refine(sp_info, partition, nScenarios);
 	partition.clear();
 	partition = new_partition;
@@ -191,6 +207,15 @@ bool disag_procedure::compare_duals(solution_sps &sp_info_s1, solution_sps &sp_i
 	return signal;
 }
 
+vector<double> disag_procedure::compute_part_prob(vector<vector<size_t>> &partition, const double &nScenarios) {
+	vector<double> part_prob;
+	part_prob.resize(partition.size());
+	for (size_t p = 0; p < partition.size(); p++) {
+		part_prob[p] = partition[p].size() / nScenarios;
+	}
+	return part_prob;
+}
+
 disag_procedure::~disag_procedure() {};
 
 
@@ -207,7 +232,7 @@ void AddVarsMaster(T &BendersProb, const char &algo) {
 	BendersProb.avg_scenarios.resize(BendersProb.nClients);
 	BendersProb.avg_scenarios = BendersProb.expected_demand(BendersProb.partition[0]);
 
-	if (algo != 'a') {
+	if (algo == 's' || algo == 'm') {
 		BendersProb.partition.clear();
 		for (size_t s = 0; s < BendersProb.nScenarios; s++) {
 			BendersProb.partition.push_back(vector<size_t>({ s }));
@@ -241,6 +266,60 @@ void AddVarsMaster(T &BendersProb, const char &algo) {
 }
 template void AddVarsMaster<BendersSFLP>(BendersSFLP &BendersProb, const char &algo);
 template void AddVarsMaster<OuterBendersSFLP>(OuterBendersSFLP &BendersProb, const char &algo);
+template void AddVarsMaster<BendersCP>(BendersCP &BendersProb, const char &algo);
+
+template<class T>
+void AddVarsMaster(T &BendersProb, const char &algo, const char &linear) {
+	size_t nscen = 0;
+	if (algo == 's' || algo == 'r') {
+		nscen = 1;
+	}
+	else {
+		nscen = BendersProb.nScenarios;
+	}
+
+	BendersProb.avg_scenarios.resize(BendersProb.nClients);
+	BendersProb.avg_scenarios = BendersProb.expected_demand(BendersProb.partition[0]);
+
+	if (algo == 's' || algo == 'm') {
+		BendersProb.partition.clear();
+		for (size_t s = 0; s < BendersProb.nScenarios; s++) {
+			BendersProb.partition.push_back(vector<size_t>({ s }));
+		}
+	}
+
+	//Declaring variables
+	BendersProb.ent_sflp.x = IloNumVarArray(BendersProb.Mast_Bend, BendersProb.nFacilities);
+	BendersProb.ent_sflp.objective = IloExpr(BendersProb.Mast_Bend);
+	for (size_t i = 0; i < BendersProb.nFacilities; i++) {
+		if (linear != 'l') {
+			BendersProb.ent_sflp.x[i] = IloNumVar(BendersProb.Mast_Bend, 0.0, 1.0, ILOINT);
+		}
+		else {
+			BendersProb.ent_sflp.x[i] = IloNumVar(BendersProb.Mast_Bend, 0.0, DBL_MAX, ILOFLOAT);
+		}
+		
+		BendersProb.Mast_mod.add(BendersProb.ent_sflp.x[i]);
+		BendersProb.ent_sflp.objective += BendersProb.fixed_costs[i] * BendersProb.ent_sflp.x[i];
+	}
+
+	BendersProb.ent_sflp.theta = IloNumVarArray(BendersProb.Mast_Bend, nscen);
+	for (size_t s = 0; s < nscen; s++) {
+		BendersProb.ent_sflp.theta[s] = IloNumVar(BendersProb.Mast_Bend, -DBL_MAX , DBL_MAX, ILOFLOAT);
+		BendersProb.Mast_mod.add(BendersProb.ent_sflp.theta[s]);
+		if (nscen != 1) {
+			BendersProb.ent_sflp.objective += BendersProb.probability[s] * BendersProb.ent_sflp.theta[s];
+		}
+	}
+	if (algo == 's' || algo == 'r') {
+		BendersProb.ent_sflp.objective += BendersProb.ent_sflp.theta[0];
+	}
+
+
+	//Add objective function
+	BendersProb.Mast_mod.add(IloMinimize(BendersProb.Mast_Bend, BendersProb.ent_sflp.objective));
+}
+template void AddVarsMaster<BendersCP>(BendersCP &BendersProb, const char &algo, const char &linear);
 
 //Add constraints for the average scenario
 template<class T>
@@ -324,3 +403,33 @@ void FeasibilityConstraint(T &BendersProb) {
 }
 template void FeasibilityConstraint<BendersSFLP>(BendersSFLP &BendersProb);
 template void FeasibilityConstraint<OuterBendersSFLP>(OuterBendersSFLP &BendersProb);
+
+
+//Delete mant elements of a vector at once
+void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices)
+{
+	vector<bool> markedElements(data.size(), false);
+	vector<size_t> tempBuffer;
+	tempBuffer.reserve(data.size() - deleteIndices.size());
+
+	for (vector<size_t>::const_iterator itDel = deleteIndices.begin(); itDel != deleteIndices.end(); itDel++)
+		markedElements[*itDel] = true;
+
+	for (size_t i = 0; i < data.size(); i++)
+	{
+		if (!markedElements[i])
+			tempBuffer.push_back(data[i]);
+	}
+	data = tempBuffer;
+}
+
+
+bool is_integer(float k)
+{
+	if (fabs(floor(k) - k) < 1e-6 || fabs(ceil(k) - k) < 1e-6) {
+		return true;
+	}
+	else {
+		return false;
+	}
+}

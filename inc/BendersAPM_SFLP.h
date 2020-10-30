@@ -10,6 +10,7 @@
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
 #include"UsfFunctions.h"
+#include"OuterBendersSFLP.h"
 
 ILOSTLBEGIN
 
@@ -30,10 +31,16 @@ public:
 
     //Instantiate using constructor of base class
 	BendersSFLP(string &inst_name, string &stoch_inst_name) : SFLP_GAPM(inst_name, stoch_inst_name) {};
+	BendersSFLP(const size_t &nFac, const size_t &nCli, const vector<double> &fc, const vector<vector<double>> &dc,
+		const vector<double> &fcap, const vector<vector<double>> &sto_p, const size_t &nSc, const vector<double> &pr,
+		const vector<double> &xb, const vector<vector<size_t>> &par) : SFLP_GAPM(nFac, nCli, fc, dc, fcap, sto_p, nSc, pr, xb, par) {};
     BendersSFLP() = default;
 
     //Create Master Problem
-    void CreateMaster(const char &algo);
+    double CreateMaster(const char &algo, vector<vector<size_t>> &part, vector<double> &xb);
+
+	//Iterative Benders
+	void IterativeMaster(const char &algo, string &inst_name, string &stoch_inst_name, vector<vector<size_t>> part);
 
 	//Recovering solution information
 	void RecoverSolution(IloCplex &master_cpx);

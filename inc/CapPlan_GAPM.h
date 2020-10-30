@@ -1,71 +1,59 @@
 // Created by CDRPico
-// 11/06/2020 13:47
+// 07/10/2020 04:35
 
 #pragma once
 
-#ifndef SFLP_GAPM_H
-#define SFLP_GAPM_H
+#ifndef CP_GAPM_H
+#define CP_GAPM_H
 
 using namespace std;
 
+#include<list>
 #include"InstanceSFLP.h"
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
 #include<gurobi_c++.h>
 #include<cfloat>
 #include"UsfFunctions.h"
+#include"SMPS_ElecPlan.h"
+
 
 ILOSTLBEGIN
 
-//Definitions for Gurobi
-struct SubProblem_GRB {
-	//Variables
-	GRBVar **y = NULL;
 
-	GRBConstr *dem_constraints = NULL;
-
-	GRBConstr *cap_constraints = NULL;
-
-	SubProblem_GRB() = default;
-};
-
-struct Master_CPX {
-	//Variables
-	IloNumVarArray x;
-	IloNumVarArray3 y;
-	//Objective
-	IloExpr objective;
-	//Constraints
-	IloRangeArray dem_satisfaction;
-	IloRangeArray linking_constraints;
-	IloRangeArray Feasibility;
-};
-
-struct SubProblem_CPX {
-	//Variables
-	IloNumVarArray2 y;
-	//Objective
-	IloExpr objective;
-	//Constraints
-	IloRangeArray dem_constraints;
-	IloRangeArray cap_constraints;
-};
-
-
-class SFLP_GAPM : public InstanceSFLP
-{
+class CP_GAPM : public Inst_ElecPlan {
 public:
+	struct Master_CPX {
+		//Variables
+		IloNumVarArray x;
+		IloNumVarArray2 y;
+		//Objective
+		IloExpr objective;
+		//Constraints
+		IloRangeArray ax_b;
+		IloRangeArray linking_constraints;
+		IloRangeArray Feasibility;
+	};
+
+	//Definitions for Gurobi
+	struct SubProblem_GRB {
+		//Variables
+		GRBVar *y = NULL;
+
+		GRBConstr *link_constr = NULL;
+
+		SubProblem_GRB() = default;
+	};
+
 	vector<vector<size_t>> partition;
 	vector<double> obj_opt_sps;
 	//Max demand, worst case scenario
 	double max_dem;
 	vector<double> cp;
+	size_t nFacilities;
 
 	//COnstructor takes the name of the instance and the name of the stoch instance
-	SFLP_GAPM(string &inst_name, string &stoch_inst_name);
-	SFLP_GAPM(const size_t &nFac, const size_t &nCli, const vector<double> &fc, const vector<vector<double>> &dc,
-		const vector<double> &fcap, const vector<vector<double>> &sto_p, const size_t &nSc, const vector<double> &pr,
-		const vector<double> &xb, const vector<vector<size_t>> &par);
+	CP_GAPM(string &inst_name, string &stoch_name, string &time_name, string &stoch_rnd);
 
 	//Compute expectation of stochastic parameters
 	vector<double> expected_demand(vector<size_t> &element);
@@ -78,17 +66,15 @@ public:
 
 	//Create the subproblem CPLEX
 	void SPProblemCreation_CPX();
-	//Create the subproblem CPLEX
+	//Create the subproblem Gurobi
 	void SPProblemCreation_GRB();
 
 	//Modify the subproblem to solve a different scenario CPLEX
 	void SPProblemModification_CPX(vector<size_t> &element, bool = false);
-	//Modify the subproblem to solve a different scenario CPLEX
 	void SPProblemModification_GRB(vector<size_t> &element, bool = false);
 
 	//Solve the subproblem
 	void SPProbleSolution_CPX(vector<double> &stoch, solution_sps *sp_info, bool = false);
-	//Solve the subproblem
 	void SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info, bool = false);
 
 	//function declarations only to allow outerbenders running correctly templated
@@ -100,34 +86,57 @@ public:
 	//New iteration cuts
 	void new_cuts(vector<vector<double>> &stoch, const vector<solution_sps>* sp_info, bool &violated, bool = false) {};
 
-	// Given the current x_bar and solution of subprobs, the UB is computed
-	//double compute_UB(vector<solution_sps> &sp_info, double solution_sps::*obj);
+	//Identify the conex component of a solution
+	vector<size_t> ori_sol;
+	vector<size_t> dest_sol;
+	vector<vector<size_t>> ori_comcon_sol;
+	vector<vector<size_t>> dest_comcon_sol;
+	vector<double> flows_comcon_sol;
+	vector<vector<double>> caps_sol;
 
-	// Labeling second stage variables
-	void Labeling_y();
+	//Order of demands in constraints
+	vector<size_t> dem_constr;
+	void link_dem_con();
 
-	//Labeling demand constraints
-	void Label_demand_constr();
-	//Labeling capacity constraints
-	void Label_capacity_constr();
+	//Generate the conex component of a given solution
+	void LookCompCon();
 
+	//Flows in the conex component
+	void FlowsComCon();
+
+	//to compute partition prob based on the number of scenraios in an element
 	vector<double> part_prob;
 
 	//Type of GAPM (scenarios or full problem)
 	char gapm_type;
 
+
+	vector<vector<vector<vector<size_t>>>> subpartitions;
+	vector<vector<size_t>> subpart_clients;
+	vector<vector<vector<double>>> prob_sp_scen;
+	vector<vector<double>> prob_sp_acum;
+	vector<vector<vector<double>>> expected_subpart;
+
+	void GenSubpartitions();
+
+	void GenScen(vector<size_t> client, vector<size_t> &sc, const size_t &size_v, const size_t &k, double &new_prob);
+
+	vector<vector<double>> master_scens_sp;
+	vector<double> prob_scens;
+	vector<size_t> clients_attended;
+	void GenExpectedScen();
+	void join_scen(vector<double> new_scen, size_t k, double prob);
+
+	vector<vector<double>> sp_scenarios_full;
+	void FinalScenariosSubparts();
+
+	//Full problem for benchmark
+	void FullCP();
+
+
 protected:
 	//Master entities
 	Master_CPX master_entities;
-
-	//SubProblem env
-	IloEnv SFLP_sp_cpx = IloEnv();
-
-	//Subproblem model
-	IloModel subprob_cpx = IloModel(SFLP_sp_cpx);
-
-	//Subproblem entities CPLEX
-	SubProblem_CPX sp_entities_cpx;
 
 	//Gurobi env
 	GRBEnv SFLP_sp_grb = GRBEnv();
@@ -138,13 +147,7 @@ protected:
 	//Subproblem entities Gurobi
 	SubProblem_GRB sp_entities_grb;
 
-	//Names second stage variables
-	vector<vector<string>> Label_y;
-
-	//Demand constraint label
-	vector<string> Label_demconst;
-	//Capacity constraint label
-	vector<string> Label_capconst;
 };
+
 
 #endif

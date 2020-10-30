@@ -44,7 +44,7 @@ class InstanceSFCMFP {
         vector<double> x_bar;
         vector<vector<vector<double>>> y_bar;
 
-        InstanceSFCMFP(){};   
+        InstanceSFCMFP() = default;   
 
         //Given the file containing the info, we read the data
         void read_instance(ifstream &file);

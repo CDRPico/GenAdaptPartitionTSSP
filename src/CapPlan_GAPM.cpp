@@ -21,10 +21,10 @@ CP_GAPM::CP_GAPM(string &inst_name, string &stoch_name, string &time_name, strin
 	//List number of client attended on each constraint
 	link_dem_con();
 	
-	//size_t nnn = 100000;
-	//testin.generate_instances(nnn);
-	//string testname = "capplan_small_100000.txt";
-	//testin.write_st(testname);
+	/*size_t nnn = 100000;
+	generate_instances(nnn);
+	string testname = "capplan_large_100000.txt";
+	write_st(testname);*/
 
 	const char* flr = stoch_rnd.c_str();
 	ifstream stochfile(flr);
@@ -242,8 +242,9 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 		cout << " Sensitivity analysis constraint " << s+1 << "[" << lowerlim[s] << " - " << upperlim[s] << "] " << cplex_master->getDual(master_entities.linking_constraints[s]) << endl;
 	}*/
 	LB = cplex_master->getObjValue();
-	//LookCompCon();
-	/*FlowsComCon();
+	LookCompCon();
+	CapacityComCon();
+	FlowsComCon();
 	GenSubpartitions();
 	GenExpectedScen();
 	FinalScenariosSubparts();
@@ -251,7 +252,7 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	for (size_t s = 0; s < part_prob.size(); s++) {
 		tot += part_prob[s];
 	}
-	LB = cplex_master->getObjValue();*/
+	LB = cplex_master->getObjValue();
 
 }
 
@@ -479,6 +480,20 @@ void CP_GAPM::FlowsComCon() {
 	}
 }
 
+void CP_GAPM::CapacityComCon() {
+	flows_orig_comcon_sol.resize(ori_comcon_sol.size(), 0.0);
+	for (size_t i = 0; i < ori_comcon_sol.size(); i++) {
+		vector<size_t> or_nodes;
+		or_nodes = ori_comcon_sol[i];
+		remove_duplicates(or_nodes);
+		for (size_t j = 0; j < or_nodes.size(); j++) {
+			vector<size_t>::iterator it = find(terminals.begin(), terminals.end(), or_nodes[j]);
+			size_t pos = distance(terminals.begin(), it);
+			flows_orig_comcon_sol[i] += x_bar[pos];
+		}
+	}
+}
+
 
 void CP_GAPM::GenSubpartitions() {
 	subpartitions.resize(flows_comcon_sol.size());
@@ -689,3 +704,10 @@ void CP_GAPM::FullCP() {
 		<< 0 << " " //No pending nodes to be explored
 		<< partition.size() << " ";
 }
+
+
+double CP_GAPM::difDemOf(size_t &nTree, vector<size_t> &offnodes_2, vector<size_t> demnodes_2) {
+	size_t a = 0;
+	return 0.0;
+}
+

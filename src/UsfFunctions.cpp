@@ -433,3 +433,16 @@ bool is_integer(float k)
 		return false;
 	}
 }
+
+void remove_duplicates(vector<size_t> &v)
+{
+	vector<size_t>::iterator itr = v.begin();
+	unordered_set<size_t> s;
+
+	for (auto curr = v.begin(); curr != v.end(); ++curr) {
+		if (s.insert(*curr).second)
+			*itr++ = *curr;
+	}
+
+	v.erase(itr, v.end());
+}

@@ -25,8 +25,8 @@ int main(int argc, char **argv) {
 		string file_ce_stoch = "stoch_nospace.mps";
 		size_t nnn = 1000;
 		//testin.generate_instances(nnn);
-		string testname = "capplan_small_10000.txt";
-		const char algo = 'm';
+		string testname = "capplan_small_1000.txt";
+		const char algo = 'n';
 		if (algo == 'n') {
 			//Creating instance of the problem based on previous files
 			CP_GAPM Instance(file_ce_core, file_ce_stoch, file_ce_time, testname);

@@ -397,7 +397,7 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 	//solve first master
 	solveMaster(org);
 
-	if (algo == 'm' || algo == 'a') {
+	if (algo == 'm') {
 		sp_info.clear();
 		stoch.clear();
 		sp_info.resize(nScenarios);
@@ -417,7 +417,7 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 		cutsindiasgg(org);
 		solveMaster(org);
-	}
+	}/**/
 	/*else if (algo == 'a') {
 		sp_info.clear();
 		stoch.clear();
@@ -443,7 +443,6 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 
 		vector<vector<size_t>> partition1;
-		partition1.resize(nScenarios);
 		for (size_t s = 0; s < nScenarios; s++) {
 			partition1.push_back({ s });
 		}

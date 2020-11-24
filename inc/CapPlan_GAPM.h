@@ -92,6 +92,7 @@ public:
 	vector<vector<size_t>> ori_comcon_sol;
 	vector<vector<size_t>> dest_comcon_sol;
 	vector<double> flows_comcon_sol;
+	vector<double> flows_orig_comcon_sol;
 	vector<vector<double>> caps_sol;
 
 	//Order of demands in constraints
@@ -102,7 +103,10 @@ public:
 	void LookCompCon();
 
 	//Flows in the conex component
+	//Function to compute the total flow in a tree of the comp conex
 	void FlowsComCon();
+	//Capacity of plants in the same tree of the conex component
+	void CapacityComCon();
 
 	//to compute partition prob based on the number of scenraios in an element
 	vector<double> part_prob;
@@ -129,6 +133,9 @@ public:
 
 	vector<vector<double>> sp_scenarios_full;
 	void FinalScenariosSubparts();
+
+	//Identify total demand-offer in a solution tree
+	double difDemOf(size_t &nTree, vector<size_t> &offnodes, vector<size_t> demnodes);
 
 	//Full problem for benchmark
 	void FullCP();

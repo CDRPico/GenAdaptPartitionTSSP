@@ -11,6 +11,7 @@ using namespace std;
 #include<random>
 #include<sstream>
 #include<chrono>
+#include<unordered_set>
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
 
@@ -141,5 +142,7 @@ void FeasibilityConstraint(T &BendersProb);
 void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices);
 
 bool is_integer(float k);
+
+void remove_duplicates(std::vector<size_t> &v);
 
 #endif

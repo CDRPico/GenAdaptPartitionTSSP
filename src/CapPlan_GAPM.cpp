@@ -2,6 +2,7 @@
 // 07/10/2020 04:35
 
 #include"../inc/CapPlan_GAPM.h"
+#include<algorithm>
 
 CP_GAPM::CP_GAPM(string &inst_name, string &stoch_name, string &time_name, string &stoch_rnd) {
 	//read files
@@ -224,16 +225,19 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 			cout << "Plant " << first_st_var[i] << " has capacity " << x_bar[i] << " assigned." << endl;
 	}
 
+	size_t total_elements;
+	if (gapm_type == 's') {
+		total_elements = partition.size();
+	}
+	else {
+		total_elements = sp_scenarios_full.size();
+	}
+	
 	y_bar.resize(second_st_var.size());
 	for (size_t i = 0; i < second_st_var.size(); i++) {
-		y_bar[i] = cplex_master->getValue(master_entities.y[i][0]);
-		for (size_t s = 0; s < part_prob.size(); s++) {
-			if (cplex_master->getValue(master_entities.y[i][s]) > 0.0) {
-				//cout << "Var " << second_st_var[i] << " scenario " << s << " has value " << cplex_master->getValue(master_entities.y[i][s]) << endl;
-				ori_sol.push_back(origins[i]);
-				dest_sol.push_back(destinations[i]);
-			}
-		}
+		y_bar[i].resize(total_elements);
+		for (size_t s = 0; s < total_elements; s++) {
+			y_bar[i][s] = cplex_master->getValue(master_entities.y[i][s]);
 	}
 	IloNumArray lowerlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
 	IloNumArray upperlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
@@ -245,6 +249,8 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	LookCompCon();
 	CapacityComCon();
 	FlowsComCon();
+	//TODO: Compare flows and decide according cases
+	//Check latex file from Eduardo to split according the case
 	GenSubpartitions();
 	GenExpectedScen();
 	FinalScenariosSubparts();
@@ -407,7 +413,19 @@ void CP_GAPM::SPProbleSolution_GRB(vector<double> &stoch, solution_sps *sp_info,
 }
 
 //Function to build the conex component of a given solution
-void CP_GAPM::LookCompCon() {
+void CP_GAPM::LookCompCon(const size_t &s) {
+	//obtain all origins and destinations served from plants for each element into the partition
+	dest_sol.clear();
+	ori_sol.clear();
+	for (size_t i = 0; i < second_st_var.size(); i++) {
+		if (y_bar[i][s] > 0.0) {
+			ori_sol.push_back(origins[i]);
+			dest_sol.push_back(destinations[i]);
+		}
+	}
+	//Generate the conex component
+	ori_comcon_sol.clear();
+	dest_comcon_sol.clear();
 	while (ori_sol.size() > 0) {
 		vector<size_t> to_check_or;
 		vector<size_t> to_check_de;
@@ -464,7 +482,8 @@ void CP_GAPM::LookCompCon() {
 	}
 }
 
-void CP_GAPM::FlowsComCon() {
+void CP_GAPM::FlowsComCon(const size_t &s) {
+	flows_comcon_sol.clear();
 	flows_comcon_sol.resize(ori_comcon_sol.size());
 	for (size_t k = 0; k < ori_comcon_sol.size(); k++) {
 		flows_comcon_sol[k] = 0.0;
@@ -475,12 +494,13 @@ void CP_GAPM::FlowsComCon() {
 					break;
 				pos++;
 			}
-			flows_comcon_sol[k] += y_bar[pos];
+			flows_comcon_sol[k] += y_bar[pos][s];
 		}
 	}
 }
 
-void CP_GAPM::CapacityComCon() {
+void CP_GAPM::CapacityComCon(const size_t &s) {
+	flows_orig_comcon_sol.clear();
 	flows_orig_comcon_sol.resize(ori_comcon_sol.size(), 0.0);
 	for (size_t i = 0; i < ori_comcon_sol.size(); i++) {
 		vector<size_t> or_nodes;
@@ -711,3 +731,64 @@ double CP_GAPM::difDemOf(size_t &nTree, vector<size_t> &offnodes_2, vector<size_
 	return 0.0;
 }
 
+//Check the cases in the conex component
+//demand > capacity
+//demand < capacity
+//demand = capacity
+void CP_GAPM::CheckCasesComcon(const size_t &s) {
+	//ori_comcon_sol to get the current number of trees in the component
+	size_t ntrees = ori_comcon_sol.size();
+	//identify case for each tree into the conex component
+	for (size_t i = 0; i < ntrees; i++) {
+		//case 1 demand > capacity
+		if (flows_orig_comcon_sol[i] < flows_comcon_sol[i]) {
+			size_t viol_cli;
+			//TODO: identify the tree possible cases
+			//first we need to find the client who is not being fully served
+			//for each client check the total demand served
+			for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
+				//dem sat is the total dem sent to client
+				double dem_sat = 0.0
+				for (size_t a = 0; a < second_st_var.size(); a++) {
+					if (destinations[a] == dest_comcon_sol[i][j])
+						dem_sat += y_bar[a][s];
+				}
+				//Now look for the total demand of client in this scenario
+				size_t cli = dest_comcon_sol[i][j];
+				vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cli);
+				size_t pos = distance(dem_constr.begin(), it);
+				double cli_dem = sp_scenarios_full[s][pos];
+				if (dem_sat < cli_dem){
+					//obtain the index of the client who is not being served completely
+					viol_cli = pos;
+					break;
+				}
+			}
+			//the cases will be defined by the flow in the tree plus the total demand of unsatisfaied client
+			// secondly, the total flow in the tree minus the demand of unsatisfied client
+		//case demand < capacity
+		} else if (flows_orig_comcon_sol[i] > flows_comcon_sol[i]) {
+			size_t viol_pl;
+			//TODO: indetify the tree possible cases
+			//We need to find the plant having surplus
+			//for each plant check check the total product delivered
+			//compare it against the x_bar
+			for (size_t j = 0; j < ori_comcon_sol.size(); j++) {
+				//total delivered by the plant
+				double pr_del = 0.0;
+				for (size_t a = 0; a < second_st_var.size(); a++) {
+					if (origins[a] == ori_comcon_sol[i][j])
+						pr_del += y_bar[a][s];
+				}
+				//Now look for the total capacity of the plant, using x_bar
+				size_t pl = ori_comcon_sol[i][j];
+				vector<size_t>::iterator it = find(terminals.begin(), terminals.end(), pl);
+				size_t pos = distance(terminals.begin(), it);
+				double pl_of = x_bar[pos];
+				if ()
+			}
+		} else {
+			//TODO: run the separation already made in GenSubpartitions method
+		}
+	}
+}

@@ -87,10 +87,13 @@ public:
 	void new_cuts(vector<vector<double>> &stoch, const vector<solution_sps>* sp_info, bool &violated, bool = false) {};
 
 	//Identify the conex component of a solution
+	//Store origins and destinations which appear in a certain solution
 	vector<size_t> ori_sol;
 	vector<size_t> dest_sol;
+	//Origin and destination nodes for the trees into the conex component
 	vector<vector<size_t>> ori_comcon_sol;
 	vector<vector<size_t>> dest_comcon_sol;
+	//Store demand and capacity assigned on a certain solution for a tree in the conex component
 	vector<double> flows_comcon_sol;
 	vector<double> flows_orig_comcon_sol;
 	vector<vector<double>> caps_sol;
@@ -100,13 +103,20 @@ public:
 	void link_dem_con();
 
 	//Generate the conex component of a given solution
-	void LookCompCon();
+	//This function depends on s, because the conex component might be different foir each scenario
+	void LookCompCon(const size_t &s);
 
 	//Flows in the conex component
 	//Function to compute the total flow in a tree of the comp conex
-	void FlowsComCon();
+	void FlowsComCon(const size_t &s);
 	//Capacity of plants in the same tree of the conex component
-	void CapacityComCon();
+	void CapacityComCon(const size_t &s);
+
+	//Check the cases in the conex component
+	//demand > capacity
+	//demand < capacity
+	//demand = capacity
+	void CheckCasesComcon(const size_t &s);
 
 	//to compute partition prob based on the number of scenraios in an element
 	vector<double> part_prob;

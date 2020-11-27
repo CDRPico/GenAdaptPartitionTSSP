@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/inc",
+                "/opt/ibm/ILOG/CPLEX_Studio_Community1210/cplex/include",
+                "/opt/ibm/ILOG/CPLEX_Studio_Community1210/concert/include",
+                "/home/cdrpico/Documents/cppProjects/TSSPInstancesReader/inc/",
+                "/opt/gurobi910/linux64/include"
+            ],
+            "defines": ["IL_STD", "_DEBUG", "UNICODE", "_UNICODE"],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
+        }
+    ],
+    "version": 4
+}

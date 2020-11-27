@@ -9,8 +9,8 @@ CC = g++
 #PROGNAME = read_instances_TSSP.a
 #To compile as program
 PROGNAME = GAPM
-INCLUDES = -I. -I/inc -I/home/cdrpico/cppProjects/tsspInstancesReader/TSSPInstancesReader/inc -I/opt/ibm/ILOG/CPLEX_Studio1210/concert/include -I/opt/ibm/ILOG/CPLEX_Studio1210/cplex/include
-LIBS = -L/home/cdrpico/cppProjects/tsspInstancesReader/TSSPInstancesReader -L/opt/ibm/ILOG/CPLEX_Studio1210/concert/lib/x86-64_linux/static_pic/ -L/opt/ibm/ILOG/CPLEX_Studio1210/cplex/lib/x86-64_linux/static_pic/ -lm -lconcert -lilocplex -lcplex -lpthread -ldl -lread_instances_TSSP
+INCLUDES = -I. -I/inc -I/home/cdrpico/cppProjects/TSSPInstancesReader/inc -I/opt/ibm/ILOG/CPLEX_Studio_Community1210/concert/include -I/opt/ibm/ILOG/CPLEX_Studio_Community1210/cplex/include
+LIBS = -L/home/cdrpico/cppProjects/TSSPInstancesReader -L/opt/ibm/ILOG/CPLEX_Studio_Community1210/concert/lib/x86-64_linux/static_pic/ -L/opt/ibm/ILOG/CPLEX_Studio_Community1210/cplex/lib/x86-64_linux/static_pic/ -lm -lconcert -lilocplex -lcplex -lpthread -ldl -lread_instances_TSSP
 
 DEFS= 
 

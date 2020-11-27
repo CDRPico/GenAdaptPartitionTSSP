@@ -20,9 +20,9 @@ int main(int argc, char **argv) {
 	int problem = 1;
 
 	if (problem == 1) {
-		string file_ce_time = "time_nospace.mps";
-		string file_ce_core = "core_nospace.mps";
-		string file_ce_stoch = "stoch_nospace.mps";
+		string file_ce_time = "cp_instances/time_nospace.mps";
+		string file_ce_core = "cp_instances/core_nospace.mps";
+		string file_ce_stoch = "cp_instances/stoch_nospace.mps";
 		size_t nnn = 1000;
 		//testin.generate_instances(nnn);
 		string testname = "capplan_small_1000.txt";

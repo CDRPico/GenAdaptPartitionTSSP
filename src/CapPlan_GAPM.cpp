@@ -221,8 +221,9 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	x_bar.resize(first_st_var.size());
 	for (size_t i = 0; i < first_st_var.size(); i++) {
 		x_bar[i] = cplex_master->getValue(master_entities.x[i]);
-		if (x_bar[i] > 0)
+		/*if (x_bar[i] > 0) {
 			cout << "Plant " << first_st_var[i] << " has capacity " << x_bar[i] << " assigned." << endl;
+		}*/
 	}
 
 	size_t total_elements;
@@ -238,6 +239,7 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 		y_bar[i].resize(total_elements);
 		for (size_t s = 0; s < total_elements; s++) {
 			y_bar[i][s] = cplex_master->getValue(master_entities.y[i][s]);
+		}
 	}
 	IloNumArray lowerlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
 	IloNumArray upperlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
@@ -246,14 +248,14 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 		cout << " Sensitivity analysis constraint " << s+1 << "[" << lowerlim[s] << " - " << upperlim[s] << "] " << cplex_master->getDual(master_entities.linking_constraints[s]) << endl;
 	}*/
 	LB = cplex_master->getObjValue();
-	LookCompCon();
-	CapacityComCon();
-	FlowsComCon();
+	//LookCompCon();
+	//CapacityComCon();
+	//FlowsComCon();
 	//TODO: Compare flows and decide according cases
 	//Check latex file from Eduardo to split according the case
-	GenSubpartitions();
-	GenExpectedScen();
-	FinalScenariosSubparts();
+	//GenSubpartitions();
+	//GenExpectedScen();
+	//FinalScenariosSubparts();
 	double tot = 0.0;
 	for (size_t s = 0; s < part_prob.size(); s++) {
 		tot += part_prob[s];
@@ -748,7 +750,7 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 			//for each client check the total demand served
 			for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
 				//dem sat is the total dem sent to client
-				double dem_sat = 0.0
+				double dem_sat = 0.0;
 				for (size_t a = 0; a < second_st_var.size(); a++) {
 					if (destinations[a] == dest_comcon_sol[i][j])
 						dem_sat += y_bar[a][s];

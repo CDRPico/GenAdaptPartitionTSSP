@@ -116,7 +116,10 @@ public:
 	//demand > capacity
 	//demand < capacity
 	//demand = capacity
+	//This method returns vector of vectors where each tree must be partitioned
 	void CheckCasesComcon(const size_t &s);
+	//Demand is integer but split points might be float, so we need to transform the result to integer splitting points
+
 
 	//to compute partition prob based on the number of scenraios in an element
 	vector<double> part_prob;
@@ -144,8 +147,11 @@ public:
 	vector<vector<double>> sp_scenarios_full;
 	void FinalScenariosSubparts();
 
-	//Identify total demand-offer in a solution tree
-	double difDemOf(size_t &nTree, vector<size_t> &offnodes, vector<size_t> demnodes);
+	//vector of vectors to store where trees of conex compnent will be partitioned
+	// 1 position for greater and smaller or equal
+	// 2 positions for smaller, between [], greater
+	vector<vector<double>> where_part_tree;
+
 
 	//Full problem for benchmark
 	void FullCP();

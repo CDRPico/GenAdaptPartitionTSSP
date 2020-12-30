@@ -248,9 +248,10 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 		cout << " Sensitivity analysis constraint " << s+1 << "[" << lowerlim[s] << " - " << upperlim[s] << "] " << cplex_master->getDual(master_entities.linking_constraints[s]) << endl;
 	}*/
 	LB = cplex_master->getObjValue();
-	//LookCompCon();
-	//CapacityComCon();
-	//FlowsComCon();
+	LookCompCon(0);
+	CapacityComCon(0);
+	FlowsComCon(0);
+	CheckCasesComcon(0);
 	//TODO: Compare flows and decide according cases
 	//Check latex file from Eduardo to split according the case
 	//GenSubpartitions();
@@ -435,7 +436,6 @@ void CP_GAPM::LookCompCon(const size_t &s) {
 		to_check_de.push_back(dest_sol[0]);
 		ori_comcon_sol.push_back({ ori_sol[0] });
 		dest_comcon_sol.push_back({ dest_sol[0] });
-		//TODO: add flows to the vector which will contain flow for the trees
 		//delete elements from original vectors
 		vector<size_t>::iterator it1;
 		vector<size_t>::iterator it2;
@@ -516,60 +516,6 @@ void CP_GAPM::CapacityComCon(const size_t &s) {
 	}
 }
 
-
-void CP_GAPM::GenSubpartitions() {
-	subpartitions.resize(flows_comcon_sol.size());
-	subpart_clients.resize(flows_comcon_sol.size());
-	prob_sp_scen.resize(flows_comcon_sol.size());
-	prob_sp_acum.resize(flows_comcon_sol.size());
-	expected_subpart.resize(flows_comcon_sol.size());
-
-	size_t positions = 0;
-	for (size_t k = 0; k < ori_comcon_sol.size(); k++) {
-		sort(dest_comcon_sol[k].begin(), dest_comcon_sol[k].end());
-		subpart_clients[k] = dest_comcon_sol[k];
-		vector<size_t>::iterator ct = unique(subpart_clients[k].begin(), subpart_clients[k].end());
-		subpart_clients[k].resize(distance(subpart_clients[k].begin(), ct));
-
-		if (is_integer(flows_comcon_sol[k])) {
-			positions = 3;
-		}
-		else {
-			positions = 2;
-		}
-		subpartitions[k].resize(positions);
-		prob_sp_scen[k].resize(positions);
-		//expected_subpart[k].resize(positions);
-
-		vector<size_t> new_scen;
-		double new_prob;
-		vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), subpart_clients[k][0]);
-		size_t pos = distance(dem_constr.begin(), it);
-		for (size_t s = 0; s < indep_rhs_dist[pos].size(); s++) {
-			new_scen.push_back(indep_rhs_dist[pos][s]);
-			new_prob = marginal_prob[pos][s];
-			GenScen(subpart_clients[k], new_scen, subpart_clients[k].size(), k, new_prob);
-			new_scen.pop_back();
-		}
-
-		for (size_t s1 = 0; s1 < prob_sp_scen[k].size(); s1++) {
-			double prob_part = 0.0;
-			vector<double> expected_sp_part(subpartitions[k][s1][0].size(),0.0);
-			for (size_t s2 = 0; s2 < prob_sp_scen[k][s1].size(); s2++) {
-				prob_part += prob_sp_scen[k][s1][s2];
-				for (size_t s3 = 0; s3 < subpartitions[k][s1][s2].size(); s3++) {
-					expected_sp_part[s3] += prob_sp_scen[k][s1][s2] * subpartitions[k][s1][s2][s3];
-					if (s2 == prob_sp_scen[k][s1].size() - 1) {
-						expected_sp_part[s3] = expected_sp_part[s3] / prob_part;
-					}
-				}
-			}
-			expected_subpart[k].push_back(expected_sp_part);
-			prob_sp_acum[k].push_back(prob_part);
-		}
-	}
-
-}
 
 
 void CP_GAPM::GenScen(vector<size_t> client, vector<size_t> &sc, const size_t &size_v, const size_t &k, double &new_prob) {
@@ -728,15 +674,11 @@ void CP_GAPM::FullCP() {
 }
 
 
-double CP_GAPM::difDemOf(size_t &nTree, vector<size_t> &offnodes_2, vector<size_t> demnodes_2) {
-	size_t a = 0;
-	return 0.0;
-}
-
 //Check the cases in the conex component
 //demand > capacity
 //demand < capacity
 //demand = capacity
+//This method returns vector of vectors where each tree must be partitioned 
 void CP_GAPM::CheckCasesComcon(const size_t &s) {
 	//ori_comcon_sol to get the current number of trees in the component
 	size_t ntrees = ori_comcon_sol.size();
@@ -745,9 +687,9 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 		//case 1 demand > capacity
 		if (flows_orig_comcon_sol[i] < flows_comcon_sol[i]) {
 			size_t viol_cli;
-			//TODO: identify the tree possible cases
 			//first we need to find the client who is not being fully served
 			//for each client check the total demand served
+			double total_demand_tree = 0.0;
 			for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
 				//dem sat is the total dem sent to client
 				double dem_sat = 0.0;
@@ -763,17 +705,21 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				if (dem_sat < cli_dem){
 					//obtain the index of the client who is not being served completely
 					viol_cli = pos;
-					break;
 				}
+				total_demand_tree += sp_scenarios_full[s][pos];
 			}
-			//the cases will be defined by the flow in the tree plus the total demand of unsatisfaied client
+			//get total demand and substract the demand of unsatisfied client
+			double total_minus_uns = total_demand_tree - sp_scenarios_full[s][viol_cli];
+			vector<double> split_at{ total_minus_uns, total_demand_tree };
+			// First, total tree demand minus demand of client unsatisfied
 			// secondly, the total flow in the tree minus the demand of unsatisfied client
+			where_part_tree.push_back(split_at);
 		//case demand < capacity
 		} else if (flows_orig_comcon_sol[i] > flows_comcon_sol[i]) {
 			size_t viol_pl;
-			//TODO: indetify the tree possible cases
+			double total_tree_offer = 0.0;
 			//We need to find the plant having surplus
-			//for each plant check check the total product delivered
+			//for each plant check the total product delivered
 			//compare it against the x_bar
 			for (size_t j = 0; j < ori_comcon_sol.size(); j++) {
 				//total delivered by the plant
@@ -787,10 +733,76 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				vector<size_t>::iterator it = find(terminals.begin(), terminals.end(), pl);
 				size_t pos = distance(terminals.begin(), it);
 				double pl_of = x_bar[pos];
-				if ()
+				//
+				if (pl_of > pr_del) {
+					viol_pl = pos;
+					break;
+				}
+				total_tree_offer += x_bar[pos];
 			}
+			double total_minus_surplus = total_tree_offer - x_bar[viol_pl];
+			vector<double> split_at{ total_minus_surplus, total_tree_offer };
+			where_part_tree.push_back(split_at);
 		} else {
 			//TODO: run the separation already made in GenSubpartitions method
+			//This is the total demand served in this tree flows_comcon_sol[k])
+			//Using this we can separte
+			vector<double> split_at{ flows_comcon_sol[i] };
+			where_part_tree.push_back(split_at);
 		}
 	}
+}
+
+void CP_GAPM::GenSubpartitions() {
+	subpartitions.resize(flows_comcon_sol.size());
+	subpart_clients.resize(flows_comcon_sol.size());
+	prob_sp_scen.resize(flows_comcon_sol.size());
+	prob_sp_acum.resize(flows_comcon_sol.size());
+	expected_subpart.resize(flows_comcon_sol.size());
+
+	size_t positions = 0;
+	for (size_t k = 0; k < ori_comcon_sol.size(); k++) {
+		sort(dest_comcon_sol[k].begin(), dest_comcon_sol[k].end());
+		subpart_clients[k] = dest_comcon_sol[k];
+		vector<size_t>::iterator ct = unique(subpart_clients[k].begin(), subpart_clients[k].end());
+		subpart_clients[k].resize(distance(subpart_clients[k].begin(), ct));
+
+		if (is_integer(flows_comcon_sol[k])) {
+			positions = 3;
+		}
+		else {
+			positions = 2;
+		}
+		subpartitions[k].resize(positions);
+		prob_sp_scen[k].resize(positions);
+		//expected_subpart[k].resize(positions);
+
+		vector<size_t> new_scen;
+		double new_prob;
+		vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), subpart_clients[k][0]);
+		size_t pos = distance(dem_constr.begin(), it);
+		for (size_t s = 0; s < indep_rhs_dist[pos].size(); s++) {
+			new_scen.push_back(indep_rhs_dist[pos][s]);
+			new_prob = marginal_prob[pos][s];
+			GenScen(subpart_clients[k], new_scen, subpart_clients[k].size(), k, new_prob);
+			new_scen.pop_back();
+		}
+
+		for (size_t s1 = 0; s1 < prob_sp_scen[k].size(); s1++) {
+			double prob_part = 0.0;
+			vector<double> expected_sp_part(subpartitions[k][s1][0].size(), 0.0);
+			for (size_t s2 = 0; s2 < prob_sp_scen[k][s1].size(); s2++) {
+				prob_part += prob_sp_scen[k][s1][s2];
+				for (size_t s3 = 0; s3 < subpartitions[k][s1][s2].size(); s3++) {
+					expected_sp_part[s3] += prob_sp_scen[k][s1][s2] * subpartitions[k][s1][s2][s3];
+					if (s2 == prob_sp_scen[k][s1].size() - 1) {
+						expected_sp_part[s3] = expected_sp_part[s3] / prob_part;
+					}
+				}
+			}
+			expected_subpart[k].push_back(expected_sp_part);
+			prob_sp_acum[k].push_back(prob_part);
+		}
+	}
+
 }

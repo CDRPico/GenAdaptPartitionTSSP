@@ -112,6 +112,10 @@ public:
 	//Capacity of plants in the same tree of the conex component
 	void CapacityComCon(const size_t &s);
 
+	//store the total demand into a tree of the conex component
+	vector<double> total_demand_tree;
+	void TotalDemandTree(const size_t &s);
+
 	//Check the cases in the conex component
 	//demand > capacity
 	//demand < capacity

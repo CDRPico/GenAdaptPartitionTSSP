@@ -516,6 +516,18 @@ void CP_GAPM::CapacityComCon(const size_t &s) {
 	}
 }
 
+void CP_GAPM::TotalDemandTree(const size_t &s) {
+	total_demand_tree.resize(origins.size(), 0.0);
+	for (size_t i = 0; i < ori_comcon_sol.size(); i++) {
+		for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
+			size_t cli = dest_comcon_sol[i][j];
+			vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cli);
+			size_t pos = distance(dem_constr.begin(), it);
+			total_demand_tree[i] += sp_scenarios_full[s][pos];
+		}
+	}
+}
+
 
 
 void CP_GAPM::GenScen(vector<size_t> client, vector<size_t> &sc, const size_t &size_v, const size_t &k, double &new_prob) {
@@ -685,11 +697,12 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 	//identify case for each tree into the conex component
 	for (size_t i = 0; i < ntrees; i++) {
 		//case 1 demand > capacity
-		if (flows_orig_comcon_sol[i] < flows_comcon_sol[i]) {
+		//flujo total no puede superar la capacidad
+		//TODO:: cambiar flows_comcon_sol por demanda total en el arbol
+		if (flows_orig_comcon_sol[i] < total_demand_tree[i]) {
 			size_t viol_cli;
 			//first we need to find the client who is not being fully served
 			//for each client check the total demand served
-			double total_demand_tree = 0.0;
 			for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
 				//dem sat is the total dem sent to client
 				double dem_sat = 0.0;
@@ -705,12 +718,12 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				if (dem_sat < cli_dem){
 					//obtain the index of the client who is not being served completely
 					viol_cli = pos;
+					break;
 				}
-				total_demand_tree += sp_scenarios_full[s][pos];
 			}
 			//get total demand and substract the demand of unsatisfied client
-			double total_minus_uns = total_demand_tree - sp_scenarios_full[s][viol_cli];
-			vector<double> split_at{ total_minus_uns, total_demand_tree };
+			double total_minus_uns = total_demand_tree[i] - sp_scenarios_full[s][viol_cli];
+			vector<double> split_at{ total_minus_uns, total_demand_tree[i] };
 			// First, total tree demand minus demand of client unsatisfied
 			// secondly, the total flow in the tree minus the demand of unsatisfied client
 			where_part_tree.push_back(split_at);
@@ -736,7 +749,6 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				//
 				if (pl_of > pr_del) {
 					viol_pl = pos;
-					break;
 				}
 				total_tree_offer += x_bar[pos];
 			}

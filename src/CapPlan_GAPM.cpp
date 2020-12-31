@@ -703,10 +703,10 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 		//flujo total no puede superar la capacidad
 		//TODO:: cambiar flows_comcon_sol por demanda total en el arbol
 		if (flows_orig_comcon_sol[i] < total_demand_tree[i]) {
-			size_t viol_cli;
+			size_t viol_cli = -1;
 			//first we need to find the client who is not being fully served
 			//for each client check the total demand served
-			for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
+			for (size_t j = 0; j< dest_comcon_sol[i].size(); j++) {
 				//dem sat is the total dem sent to client
 				double dem_sat = 0.0;
 				for (size_t a = 0; a < second_st_var.size(); a++) {
@@ -725,6 +725,7 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				}
 			}
 			//get total demand and substract the demand of unsatisfied client
+			assert(viol_cli > -1);
 			double total_minus_uns = total_demand_tree[i] - sp_scenarios_full[s][viol_cli];
 			vector<double> split_at{ total_minus_uns, total_demand_tree[i] };
 			// First, total tree demand minus demand of client unsatisfied

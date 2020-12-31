@@ -43,7 +43,7 @@ void GAPM::gapm_algorithm(T &ProblemInstance, const char &algo, const size_t &ns
 	ProblemInstance.SPProblemModification_GRB(partition[0], true);
 	ProblemInstance.SPProbleSolution_GRB(stoch_agg[0], &sp_info_agg[0]);*/
 	vector<double> prev_x(ProblemInstance.x_bar.size());
-	double prev_lb = 0.0;
+	//double prev_lb = 0.0;
 
 	//main loop of the algorithm
 	while (GAP > GAP_threshold && execution_time < timelimit) {
@@ -131,7 +131,7 @@ size_t GAPM::body_gapm(T &ProblemInstance, const char &algo) {
 		else {
 			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen);
 		}
-		double obj = 0.0;
+		//double obj = 0.0;
 		ProblemInstance.SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
 	}
 
@@ -190,7 +190,7 @@ size_t GAPM::body_gapm(T &ProblemInstance, const char &algo) {
 			else {
 				ProblemInstance.SPProblemModification_GRB(partition[s]);
 			}
-			double obj = 0.0;
+			//double obj = 0.0;
 			ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s]);
 		}
 
@@ -372,7 +372,7 @@ size_t GAPM::body_gapm(T &ProblemInstance, IloCplex *cplex_master, IloModel &mas
 		else {
 			ProblemInstance.SPProblemModification_GRB(sp_info[s].scen);
 		}
-		double obj = 0.0;
+		//double obj = 0.0;
 		ProblemInstance.SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
 	}
 
@@ -411,7 +411,7 @@ size_t GAPM::body_gapm(T &ProblemInstance, IloCplex *cplex_master, IloModel &mas
 			else {
 				ProblemInstance.SPProblemModification_GRB(partition[s]);
 			}
-			double obj = 0.0;
+			//double obj = 0.0;
 			ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s], true);
 		}
 
@@ -448,7 +448,7 @@ size_t GAPM::body_gapm(T &ProblemInstance, IloCplex *cplex_master, IloModel &mas
 				else {
 					ProblemInstance.SPProblemModification_GRB(partition[s]);
 				}
-				double obj = 0.0;
+				//double obj = 0.0;
 				ProblemInstance.SPProbleSolution_GRB(stoch_agg[s], &sp_info_agg[s], true);
 			}
 			ProblemInstance.partition.clear();

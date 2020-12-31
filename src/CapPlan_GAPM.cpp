@@ -100,7 +100,8 @@ IloModel CP_GAPM::MasterProblemCreation(const char &algo, bool removeobjs)
 		master_entities.objective = IloExpr(CP);
 		master_entities.x = IloNumVarArray(CP, first_st_var.size());
 		for (size_t i = 0; i < first_st_var.size(); i++) {
-			master_entities.x[i] = IloNumVar(CP, 0.0, DBL_MAX, ILOFLOAT);
+			std::string varName = "x("+std::to_string(i)+")";
+			master_entities.x[i] = IloNumVar(CP, 0.0, DBL_MAX, ILOFLOAT, varName.c_str());
 			master.add(master_entities.x[i]);
 			master_entities.objective += first_st_coefs[i][0] * master_entities.x[i];
 		}
@@ -113,7 +114,8 @@ IloModel CP_GAPM::MasterProblemCreation(const char &algo, bool removeobjs)
 			//Completing second stage variables
 			master_entities.y[i] = IloNumVarArray(CP, total_elements);
 			for (size_t s = 0; s < total_elements; s++) {
-				master_entities.y[i][s] = IloNumVar(CP, 0.0, DBL_MAX, ILOFLOAT);
+				std::string varName = "y("+std::to_string(i)+","+std::to_string(s)+")";
+				master_entities.y[i][s] = IloNumVar(CP, 0.0, DBL_MAX, ILOFLOAT, varName.c_str());
 				master.add(master_entities.y[i][s]);
 				double elementProb = part_prob[s];
 				master_entities.objective += (elementProb * second_st_coefs[i][0] * master_entities.y[i][s]);
@@ -251,12 +253,13 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	LookCompCon(0);
 	CapacityComCon(0);
 	FlowsComCon(0);
+	TotalDemandTree(0);
 	CheckCasesComcon(0);
 	//TODO: Compare flows and decide according cases
 	//Check latex file from Eduardo to split according the case
-	//GenSubpartitions();
-	//GenExpectedScen();
-	//FinalScenariosSubparts();
+	GenSubpartitions();
+	GenExpectedScen();
+	FinalScenariosSubparts();
 	double tot = 0.0;
 	for (size_t s = 0; s < part_prob.size(); s++) {
 		tot += part_prob[s];
@@ -517,9 +520,9 @@ void CP_GAPM::CapacityComCon(const size_t &s) {
 }
 
 void CP_GAPM::TotalDemandTree(const size_t &s) {
-	total_demand_tree.resize(origins.size(), 0.0);
+	total_demand_tree.resize(ori_comcon_sol.size(), 0.0);
 	for (size_t i = 0; i < ori_comcon_sol.size(); i++) {
-		for (size_t j = 0; dest_comcon_sol[i].size(); j++) {
+		for (size_t j = 0; j < dest_comcon_sol[i].size(); j++) {
 			size_t cli = dest_comcon_sol[i][j];
 			vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cli);
 			size_t pos = distance(dem_constr.begin(), it);

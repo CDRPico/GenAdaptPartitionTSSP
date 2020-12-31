@@ -6,7 +6,6 @@
 #ifndef SFCMFP_GAPM_H
 #define SFCMFP_GAPM_H
 
-using namespace std;
 
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
@@ -14,6 +13,8 @@ using namespace std;
 #include<cfloat>
 #include"UsfFunctions.h"
 #include"InstancesSFCMFP.h"
+
+using namespace std;
 
 ILOSTLBEGIN
 

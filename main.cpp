@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 		string file_ce_time = "cp_instances/time_nospace.mps";
 		string file_ce_core = "cp_instances/core_nospace.mps";
 		string file_ce_stoch = "cp_instances/stoch_nospace.mps";
-		size_t nnn = 1000;
+		//size_t nnn = 1000;
 		//testin.generate_instances(nnn);
 		string testname = "capplan_small_1000.txt";
 		const char algo = 'n';
@@ -56,6 +56,7 @@ int main(int argc, char **argv) {
 			vector<double> xb(Instance.nFacilities, 0.0);
 			//Create and run procedure
 			double optimal = Instance.runBenders(algo, part, xb);
+			optimal = 0; // Agregado para evitar warning de que no se usaba
 			//Instance.IterativeMaster(algo, file, file_stoch, part);
 		}
 	}
@@ -88,6 +89,7 @@ int main(int argc, char **argv) {
 				vector<double> xb(Instance.nFacilities, 0.0);
 				//Create and run procedure
 				double optimal = Instance.CreateMaster(algo, part, xb);
+				optimal = 0; // Agregado para evitar warning de que no se usaba
 				//Instance.IterativeMaster(algo, file, file_stoch, part);
 			}
 		}

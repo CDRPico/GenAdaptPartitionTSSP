@@ -6,11 +6,13 @@
 #ifndef INSTANCESFCMFP_H
 #define INSTANCESFCMFP_H
 
-using namespace std;
+
 #include<iostream>
 #include<sstream>
 #include<fstream>
 #include<vector>
+
+using namespace std;
 
 class InstanceSFCMFP {
     public:

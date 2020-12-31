@@ -11,17 +11,17 @@
 
 struct cut_pool {
 	//CPLEX cuts preserved from one iteration to the next one
-	//x coefficients
-	vector<double> x_coefs;
-	//theta coefficients
-	vector<double> theta_coefs;
-	IloRange cut_pool_constr;
 	//Scenarios for a certain cut
 	vector<size_t> elem_cut;
 	//cut name
 	string cut_name;
 	//is active
 	bool active;
+	//x coefficients
+	vector<double> x_coefs;
+	//theta coefficients
+	vector<double> theta_coefs;
+	IloRange cut_pool_constr;
 	//constructor
 	cut_pool() {}
 	cut_pool(const IloEnv *env, const IloExpr *cut_pool_lhs, double rhs, vector<size_t> elem_cut, const string &cut_name, bool active, vector<double> x_coefs, vector<double> theta_coefs) :

@@ -1,7 +1,7 @@
 // Created by CDRPico
 // 11/06/2020 14:05
 
-using namespace std;
+
 
 #ifndef USF_H
 #define USF_H
@@ -14,6 +14,8 @@ using namespace std;
 #include<unordered_set>
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
+
+using namespace std;
 
 #define tolabscuts		1e-10
 #define tolrelcuts		1e-4

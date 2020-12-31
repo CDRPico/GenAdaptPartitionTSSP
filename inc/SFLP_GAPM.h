@@ -6,7 +6,6 @@
 #ifndef SFLP_GAPM_H
 #define SFLP_GAPM_H
 
-using namespace std;
 
 #include"InstanceSFLP.h"
 #include"ilcplex/ilocplex.h"
@@ -14,6 +13,9 @@ using namespace std;
 #include<gurobi_c++.h>
 #include<cfloat>
 #include"UsfFunctions.h"
+
+using namespace std;
+
 
 ILOSTLBEGIN
 

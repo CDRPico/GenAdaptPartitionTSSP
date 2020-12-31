@@ -12,9 +12,9 @@ ILOLAZYCONSTRAINTCALLBACK4(OLazyOptCuts,
 	bool&, first_out,
 	const char&, algo)
 {
-	bool reaggregated = false;
-	size_t cont = 0;
-comeback:
+	//bool reaggregated = false;
+	//size_t cont = 0;
+//comeback:
 	//Callback execution time
 	size_t scenarios = 0;
 	if (org.algo == 's') {
@@ -517,6 +517,6 @@ void OuterBendersSFLP::check_active_cuts(vector<vector<double>> &stoch, const ve
 			cp[p].active = true;
 		}
 	}
-	size_t a = 1;
+	//size_t a = 1;
 }
 

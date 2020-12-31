@@ -6,7 +6,6 @@
 #ifndef CP_GAPM_H
 #define CP_GAPM_H
 
-using namespace std;
 
 #include<list>
 #include"InstanceSFLP.h"
@@ -17,6 +16,7 @@ using namespace std;
 #include"UsfFunctions.h"
 #include"SMPS_ElecPlan.h"
 
+using namespace std;
 
 ILOSTLBEGIN
 

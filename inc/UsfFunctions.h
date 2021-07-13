@@ -14,6 +14,9 @@
 #include<unordered_set>
 #include"ilcplex/ilocplex.h"
 #include"ilconcert/iloiterator.h"
+#include<utility> 
+#include<Eigen/Dense>
+#include<Eigen/Sparse>
 
 using namespace std;
 
@@ -24,7 +27,7 @@ using namespace std;
 #define timeslot		60
 #define GAP_threshold           1e-3
 #define expectation_threshold   1e-3
-
+#define tol_difference 1e-6
 
 //Useful Definitions CPLEX
 typedef IloArray<IloNumVarArray> IloNumVarArray2;
@@ -141,10 +144,33 @@ void ValidInequalities(T &BendersProb, const char &algo);
 template<class T>
 void FeasibilityConstraint(T &BendersProb);
 
-void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices);
+template <class T>
+void DeleteAll(vector<T> &data, const vector<size_t>& deleteIndices);
+
+class whole_partition;
+struct part_characterisation;
+struct eigen_characterisation;
+class eigen_partition;
+void DeleteAllWP(whole_partition & data, const vector<size_t>& deleteIndices);
+
+void DeleteAllWP(eigen_partition & data, const vector<size_t>& deleteIndices);
 
 bool is_integer(float k);
 
 void remove_duplicates(std::vector<size_t> &v);
+
+//Function to compare to vector of strings and check if boot are equal or not
+template<class T>
+bool compareVectors(vector<T> &base_case, vector<T> &compare);
+
+template<class T>
+pair<bool, size_t > findInVector(vector<T>  & vecOfElements, const T  & element);
+
+pair <bool, size_t> findInVector(vector<double> & vecOfElements, double & element);
+
+void removeColumn(Eigen::MatrixXd& matrix, size_t colToRemove);
+
+template<class T>
+void subtractScalar(vector<T> &vec, T &scalar);
 
 #endif

@@ -46,11 +46,13 @@ CP_GAPM::CP_GAPM(string &inst_name, string &stoch_name, string &time_name, strin
 	for (size_t i = 0; i < nFacilities; i++) {
 		fixed_costs[i] = first_st_coefs[i][0];
 	}
+	index_plants_clients();
 	//instatiate subproblem
 	//SPProblemCreation();
 	//Worst case scenario demand
 	//max_dem = max_demand(stoch_param);
 
+	//gapm_type = 's';
 	if (gapm_type != 's') {
 		part_prob.resize(1);
 		part_prob[0] = 1.0;
@@ -241,6 +243,9 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 		y_bar[i].resize(total_elements);
 		for (size_t s = 0; s < total_elements; s++) {
 			y_bar[i][s] = cplex_master->getValue(master_entities.y[i][s]);
+			/*if (y_bar[i][s] > 0.0) {
+				cout << y_bar[i][s] << endl;
+			}*/
 		}
 	}
 	IloNumArray lowerlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
@@ -249,22 +254,7 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	/*for (size_t s = 0; s < master_entities.linking_constraints.getSize(); s++) {
 		cout << " Sensitivity analysis constraint " << s+1 << "[" << lowerlim[s] << " - " << upperlim[s] << "] " << cplex_master->getDual(master_entities.linking_constraints[s]) << endl;
 	}*/
-	LB = cplex_master->getObjValue();
-	LookCompCon(0);
-	CapacityComCon(0);
-	FlowsComCon(0);
-	TotalDemandTree(0);
-	CheckCasesComcon(0);
-	//TODO: Compare flows and decide according cases
-	//Check latex file from Eduardo to split according the case
-	GenSubpartitions();
-	GenExpectedScen();
-	FinalScenariosSubparts();
-	double tot = 0.0;
-	for (size_t s = 0; s < part_prob.size(); s++) {
-		tot += part_prob[s];
-	}
-	LB = cplex_master->getObjValue();
+	
 
 }
 
@@ -520,13 +510,20 @@ void CP_GAPM::CapacityComCon(const size_t &s) {
 }
 
 void CP_GAPM::TotalDemandTree(const size_t &s) {
+	total_demand_tree.clear();
 	total_demand_tree.resize(ori_comcon_sol.size(), 0.0);
 	for (size_t i = 0; i < ori_comcon_sol.size(); i++) {
 		for (size_t j = 0; j < dest_comcon_sol[i].size(); j++) {
 			size_t cli = dest_comcon_sol[i][j];
 			vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cli);
 			size_t pos = distance(dem_constr.begin(), it);
-			total_demand_tree[i] += sp_scenarios_full[s][pos];
+			if (gapm_type == 's') {
+				vector<double> elem_demand = expected_demand(partition[s]);
+				total_demand_tree[i] = elem_demand[pos];
+			}
+			else {
+				total_demand_tree[i] += sp_scenarios_full[s][pos];
+			}
 		}
 	}
 }
@@ -697,16 +694,31 @@ void CP_GAPM::FullCP() {
 void CP_GAPM::CheckCasesComcon(const size_t &s) {
 	//ori_comcon_sol to get the current number of trees in the component
 	size_t ntrees = ori_comcon_sol.size();
+	comcon_part_tree.clients.clear();
+	comcon_part_tree.ineq_sign.clear();
+	comcon_part_tree.demand_breakpoints.clear();
+	where_part_tree.clear();
+	vector<double> elem_demand = expected_demand(partition[s]);
 	//identify case for each tree into the conex component
 	for (size_t i = 0; i < ntrees; i++) {
 		//case 1 demand > capacity
 		//flujo total no puede superar la capacidad
 		//TODO:: cambiar flows_comcon_sol por demanda total en el arbol
-		if (flows_orig_comcon_sol[i] < total_demand_tree[i]) {
+		vector<size_t> unique_dest_tree = dest_comcon_sol[i];
+		sort(unique_dest_tree.begin(), unique_dest_tree.end());
+		vector<size_t>::iterator it;
+		it = unique(unique_dest_tree.begin(), unique_dest_tree.end());
+		unique_dest_tree.resize(distance(unique_dest_tree.begin(), it));
+		//unique element of origins
+		vector<size_t> unique_orig_tree = ori_comcon_sol[i];
+		sort(unique_orig_tree.begin(), unique_orig_tree.end());
+		it = unique(unique_orig_tree.begin(), unique_orig_tree.end());
+		unique_orig_tree.resize(distance(unique_orig_tree.begin(), it));
+		if (total_demand_tree[i] - flows_orig_comcon_sol[i] > tol_difference && unique_dest_tree.size() > 1) {
 			size_t viol_cli = -1;
 			//first we need to find the client who is not being fully served
 			//for each client check the total demand served
-			for (size_t j = 0; j< dest_comcon_sol[i].size(); j++) {
+			for (size_t j = 0; j< unique_dest_tree.size(); j++) {
 				//dem sat is the total dem sent to client
 				double dem_sat = 0.0;
 				for (size_t a = 0; a < second_st_var.size(); a++) {
@@ -717,7 +729,13 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 				size_t cli = dest_comcon_sol[i][j];
 				vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cli);
 				size_t pos = distance(dem_constr.begin(), it);
-				double cli_dem = sp_scenarios_full[s][pos];
+				double cli_dem = 0.0;
+				if (gapm_type == 's') {
+					cli_dem = elem_demand[pos];
+				}
+				else {
+					cli_dem += sp_scenarios_full[s][pos];
+				}
 				if (dem_sat < cli_dem){
 					//obtain the index of the client who is not being served completely
 					viol_cli = pos;
@@ -726,19 +744,25 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 			}
 			//get total demand and substract the demand of unsatisfied client
 			assert(viol_cli > -1);
-			double total_minus_uns = total_demand_tree[i] - sp_scenarios_full[s][viol_cli];
+			double total_minus_uns = 0.0; 
+			if (gapm_type == 's') {
+				total_minus_uns = total_demand_tree[i] - elem_demand[viol_cli];
+			}
+			else {
+				total_minus_uns = total_demand_tree[i] - sp_scenarios_full[s][viol_cli];
+			}
 			vector<double> split_at{ total_minus_uns, total_demand_tree[i] };
 			// First, total tree demand minus demand of client unsatisfied
 			// secondly, the total flow in the tree minus the demand of unsatisfied client
 			where_part_tree.push_back(split_at);
 		//case demand < capacity
-		} else if (flows_orig_comcon_sol[i] > flows_comcon_sol[i]) {
+		} else if (flows_orig_comcon_sol[i] - flows_comcon_sol[i] > tol_difference && unique_orig_tree.size()>1) {
 			size_t viol_pl;
 			double total_tree_offer = 0.0;
 			//We need to find the plant having surplus
 			//for each plant check the total product delivered
 			//compare it against the x_bar
-			for (size_t j = 0; j < ori_comcon_sol.size(); j++) {
+			for (size_t j = 0; j < unique_orig_tree.size(); j++) {
 				//total delivered by the plant
 				double pr_del = 0.0;
 				for (size_t a = 0; a < second_st_var.size(); a++) {
@@ -767,6 +791,8 @@ void CP_GAPM::CheckCasesComcon(const size_t &s) {
 			where_part_tree.push_back(split_at);
 		}
 	}
+	comcon_part_tree.clients = dest_comcon_sol;
+	comcon_part_tree.demand_breakpoints = where_part_tree;
 }
 
 void CP_GAPM::GenSubpartitions() {
@@ -821,4 +847,711 @@ void CP_GAPM::GenSubpartitions() {
 		}
 	}
 
+}
+
+//We take the old region and for each 'scenario' (subpartition)
+//a new set of subregions is generated
+void CP_GAPM::update_subregions(const size_t &iteration, const size_t &s) {
+	//if the old subregions is empty we are at the first iteration
+	//In that case, the coming comcon_part_tree is used to build the current subregions
+	if (iteration <= 1) { //modify this condition to first iteration
+		//call method to create first subregions based on comcon_part_tree
+		//reset control_subregions_new to empty
+		control_subregions_new.pr.clear();
+		initialize_subregions_it(control_subregions_new);
+	}
+	else {
+		//set the new as the old and then modify the new one when s=0
+		if (s == 0) {
+			control_subregions_old.pr.clear();
+			control_subregions_old.pr = control_subregions_new.pr;
+			control_subregions_new.pr.clear();
+		}
+		whole_partition new_control;
+		update_subregions_it(s, new_control, control_subregions_old);
+	}
+}
+
+void CP_GAPM::update_subregions_eigen(const size_t &iteration, const size_t &s) {
+	//if the old subregions is empty we are at the first iteration
+	//In that case, the coming comcon_part_tree is used to build the current subregions
+	if (iteration <= 1) {
+		//call method to create first subregions based on comcon_part_tree
+		//reset control_subregions_new to empty
+		matrix_partition_new.pr.clear();
+		initialize_subregions_eigen(matrix_partition_new);
+	}
+	else {
+		//set the new as the old and then modify the new one when s=0
+		if (s == 0) {
+			matrix_partition_old.pr.clear();
+			matrix_partition_old.pr = matrix_partition_new.pr;
+			matrix_partition_new.pr.clear();
+		}
+		eigen_partition new_control;
+		update_subregions_it_eigen(s, new_control, matrix_partition_old);
+	}
+}
+
+void CP_GAPM::update_subregions_it(const size_t &s, whole_partition &new_control, whole_partition &control_tobe_updated) {
+	//First we run the initialization with s and new_control
+	initialize_subregions_it(new_control);
+	//now with s and new_control we put alltogether in the new control
+	for (size_t p = 0; p < new_control.pr.size(); p++) {
+		//create a new entity to store info of the new subregion
+		part_characterisation new_sr;
+		new_sr.clients = control_tobe_updated.pr[s].clients;
+		new_sr.ineq_sign = control_tobe_updated.pr[s].ineq_sign;
+		new_sr.demand_breakpoints = control_tobe_updated.pr[s].demand_breakpoints;
+
+		//control_subregions_new.pr.resize(control_subregions_new.pr.size() + 1);
+		//plug the older information
+		//control_subregions_new.pr[control_subregions_new.pr.size() - 1].clients = control_tobe_updated.pr[s].clients;
+		//control_subregions_new.pr[control_subregions_new.pr.size() - 1].ineq_sign = control_tobe_updated.pr[s].ineq_sign;
+		//control_subregions_new.pr[control_subregions_new.pr.size() - 1].demand_breakpoints = control_tobe_updated.pr[s].demand_breakpoints;
+		//push back all the new information
+		for (size_t k = 0; k < new_control.pr[p].clients.size(); k++) {
+			new_sr.clients.push_back(new_control.pr[p].clients[k]);
+			new_sr.ineq_sign.push_back(new_control.pr[p].ineq_sign[k]);
+			new_sr.demand_breakpoints.push_back(new_control.pr[p].demand_breakpoints[k]);
+			//control_subregions_new.pr[control_subregions_new.pr.size() - 1].clients.push_back(new_control.pr[p].clients[k]);
+			//control_subregions_new.pr[control_subregions_new.pr.size() - 1].ineq_sign.push_back(new_control.pr[p].ineq_sign[k]);
+			//control_subregions_new.pr[control_subregions_new.pr.size() - 1].demand_breakpoints.push_back(new_control.pr[p].demand_breakpoints[k]);
+		}
+		//check if new_sr already exists in control_subregions_new.pr
+		if (s > 0) {
+			bool addnewsr = sr_exists(new_sr);
+			if (!addnewsr) {
+				control_subregions_new.add_subregion_store(new_sr.ineq_sign, new_sr.demand_breakpoints, new_sr.clients);
+			}
+		}
+		else {
+			control_subregions_new.add_subregion_store(new_sr.ineq_sign, new_sr.demand_breakpoints, new_sr.clients);
+		}
+		
+	}
+	
+}
+
+
+void CP_GAPM::update_subregions_it_eigen(const size_t &s, eigen_partition &new_control, eigen_partition &control_tobe_updated) {
+	//First we run the initialization with s and new_control
+	initialize_subregions_eigen(new_control);
+	//now with s and new_control we put alltogether in the new control
+	for (size_t p = 0; p < new_control.pr.size(); p++) {
+		//Append new control with new elements got from new subregions generated
+		eigen_characterisation new_sr;
+		new_sr.subpart_matrix = control_tobe_updated.pr[s].subpart_matrix;
+		new_sr.rhs_checkpart = control_tobe_updated.pr[s].rhs_checkpart;
+
+		size_t cur_nr = new_sr.subpart_matrix.rows();
+		new_sr.subpart_matrix.conservativeResize(cur_nr + new_control.pr[p].subpart_matrix.rows(), new_control.pr[p].subpart_matrix.cols());
+		size_t cur_nr_rhs = new_sr.rhs_checkpart.rows();
+		new_sr.rhs_checkpart.conservativeResize(cur_nr_rhs + new_control.pr[p].rhs_checkpart.rows(), 1);
+
+		//cout << new_control.pr[p].subpart_matrix << endl;
+		
+		/*for (Eigen::Index c = 0; c < new_sr.subpart_matrix.cols(); ++c) {
+			new_sr.subpart_matrix.startVec(c);
+			for (Eigen::SparseMatrix<double>::InnerIterator itC(new_control.pr[p].subpart_matrix, c); itC; ++itC)
+				new_sr.subpart_matrix.insertBack(itC.row() + cur_nr, c) = itC.value();
+		}*/		
+		std::vector<Eigen::Triplet<double> > tripletList;
+		for (int k = 0; k < new_sr.subpart_matrix.outerSize(); ++k)
+		{
+			for (Eigen::SparseMatrix<double>::InnerIterator it(new_sr.subpart_matrix, k); it; ++it)
+			{
+				tripletList.emplace_back(Eigen::Triplet<double>(it.row(), it.col(), it.value()));
+			}
+		}
+		for (int k = 0; k < new_control.pr[p].subpart_matrix.outerSize(); ++k)
+		{
+			for (Eigen::SparseMatrix<double>::InnerIterator it(new_control.pr[p].subpart_matrix, k); it; ++it)
+			{
+				tripletList.emplace_back(Eigen::Triplet<double>(it.row() + cur_nr, it.col(), it.value()));
+			}
+		}
+		new_sr.subpart_matrix.resize(cur_nr + new_control.pr[p].subpart_matrix.rows(), new_control.pr[p].subpart_matrix.cols());
+		new_sr.subpart_matrix.setFromTriplets(tripletList.begin(), tripletList.end());
+
+		//cout << new_sr.subpart_matrix << endl;
+		for (size_t k = 0; k < new_control.pr[p].rhs_checkpart.rows(); k++) {
+			new_sr.rhs_checkpart(cur_nr_rhs + k, 0) = new_control.pr[p].rhs_checkpart(k, 0);
+		}
+
+		//cout << new_sr.rhs_checkpart << endl;
+		matrix_partition_new.add_subregion_store(new_sr.rhs_checkpart, new_sr.subpart_matrix);
+	}
+}
+
+bool CP_GAPM::sr_exists(part_characterisation &new_sr) {
+	for (size_t p = 0; p < control_subregions_new.pr.size(); p++) {
+		bool vector_found = false;
+		//variable to count number of element in the subregion that are found in the current array of subregions
+		size_t cont = 0;
+		size_t k_new = 0;
+		vector<vector<size_t>> copy_clients = control_subregions_new.pr[p].clients;
+		while (k_new < new_sr.clients.size()) {
+		find_new_element:
+			if (k_new >= new_sr.clients.size()) {
+				break;
+			}
+			vector<size_t> tree_cl = new_sr.clients[k_new];
+			for (size_t k = 0; k < copy_clients.size(); k++) {
+				bool v_equals = false;
+				if (copy_clients[k].size() == tree_cl.size())
+					v_equals = compareVectors(copy_clients[k], tree_cl);
+				if (v_equals) {
+					cont += 1;
+					k_new += 1;
+					vector_found = true;
+					copy_clients.erase(copy_clients.begin() + k);
+					goto find_new_element;
+				}
+			}
+			k_new += 1;
+		}
+
+		//If it gets here, check inequality signs
+		if (cont == new_sr.clients.size()) {
+			cont = 0;
+			k_new = 0;
+			vector<vector<string>> copy_ineqsign = control_subregions_new.pr[p].ineq_sign;
+			while (k_new < new_sr.ineq_sign.size()) {
+			find_new_el:
+				if (k_new >= new_sr.ineq_sign.size()) {
+					break;
+				}
+				vector<string> tree_insig = new_sr.ineq_sign[k_new];
+				for (size_t k = 0; k < copy_ineqsign.size(); k++) {
+					bool v_equals = false;
+					if (copy_ineqsign.size() == tree_insig.size())
+						v_equals = compareVectors(copy_ineqsign[k], tree_insig);
+					if (v_equals) {
+						cont += 1;
+						k_new += 1;
+						vector_found = true;
+						copy_ineqsign.erase(copy_ineqsign.begin() + k);
+						goto find_new_el;
+					}
+				}
+				k_new += 1;
+			}
+		}
+
+		//If it gets here, check demand_breakpoints
+		if (cont == new_sr.ineq_sign.size()) {
+			cont = 0;
+			k_new = 0;
+			vector<vector<double>> copy_brkpnt = control_subregions_new.pr[p].demand_breakpoints;
+			while (k_new < new_sr.demand_breakpoints.size()) {
+			find_new_d:
+				if (k_new >= new_sr.demand_breakpoints.size()) {
+					if (cont == new_sr.demand_breakpoints.size()) {
+						return true;
+					}
+					break;
+				}
+				vector<double> tree_brk = new_sr.demand_breakpoints[k_new];
+				for (size_t k = 0; k < copy_brkpnt.size(); k++) {
+					bool v_equals = false;
+					if (copy_brkpnt.size() == tree_brk.size())
+						v_equals = compareVectors(copy_brkpnt[k], tree_brk);
+					if (v_equals) {
+						cont += 1;
+						k_new += 1;
+						vector_found = true;
+						copy_brkpnt.erase(copy_brkpnt.begin() + k);
+						goto find_new_d;
+					}
+				}
+				k_new += 1;
+			}
+		}
+	}
+	return false;
+}
+
+void CP_GAPM::initialize_subregions_it(whole_partition &control_tobe_updated) {
+	//using comcon_part_tree we create an initial set of subregions
+	for (size_t k = 0; k < comcon_part_tree.demand_breakpoints[0].size() + 1; k++) {
+		//create a vector to store the inequality sign of the current subpartition that will be created
+		vector<vector<string>> ineqs;
+		vector<vector<double>> break_values;
+		if (comcon_part_tree.demand_breakpoints[0].size() >= 1 && k == 0) {
+			ineqs.push_back({ "leq" });
+			break_values.push_back({ comcon_part_tree.demand_breakpoints[0][0] });
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 1 && k == 1) {
+			ineqs.push_back({ "g" });
+			break_values.push_back({ comcon_part_tree.demand_breakpoints[0][0] });
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 2 && k == 1) {
+			ineqs.push_back({ "g", "leq" });
+			break_values.push_back({ comcon_part_tree.demand_breakpoints[0][0], comcon_part_tree.demand_breakpoints[0][1] });
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 2 && k == 2) {
+			ineqs.push_back({ "g" });
+			break_values.push_back({ comcon_part_tree.demand_breakpoints[0][1] });
+		}
+		size_t counting = 1;
+		recursive_gen_subregions(ineqs, break_values, counting, control_tobe_updated);
+	}
+}
+
+void CP_GAPM::initialize_subregions_eigen(eigen_partition &control_tobe_updated) {
+	//count the number of client present in the conex component
+	size_t tc = 0;
+	for (size_t k = 0; k < comcon_part_tree.clients.size(); k++) {
+		tc += comcon_part_tree.clients[k].size();
+		if (comcon_part_tree.demand_breakpoints[k].size() > 1) {
+			tc += comcon_part_tree.clients[k].size();
+		}
+	}
+	for (size_t k = 0; k < comcon_part_tree.demand_breakpoints[0].size() + 1; k++) {
+		Eigen::SparseMatrix<double> subpart_matrix(1, dem_constr.size());
+		subpart_matrix.reserve(tc);
+		Eigen::MatrixXd rhs_checkpart;
+		double inse;
+		double new_rows_matrix = 0;
+		size_t counting = 0;
+		if (comcon_part_tree.demand_breakpoints[0].size() >= 1 && k == 0) {
+			//Positive coefficients in matrix
+			inse = 1.0;
+			new_rows_matrix = 1;
+			//Resize matrix (not necessary here because it was defined with 1 row)
+			//Resize rhs matrix
+			size_t nr_rhs = rhs_checkpart.rows();
+			rhs_checkpart.conservativeResize(nr_rhs + 1, 1);
+			//Populate rhs
+			rhs_checkpart(nr_rhs, 0) = comcon_part_tree.demand_breakpoints[0][0];
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 1 && k == 1) {
+			//Negative coefficients in matrix
+			inse = -1.0;
+			new_rows_matrix = 1;
+			//Resize matrix (not necessary here because it was defined with 1 row)
+			//Resize rhs matrix
+			size_t nr_rhs = rhs_checkpart.rows();
+			rhs_checkpart.conservativeResize(nr_rhs + 1, 1);
+			//Populate rhs
+			rhs_checkpart(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[0][0];
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 2 && k == 1) {
+			//Positive and Negative coefficients in matrix
+			inse = -1.0;
+			new_rows_matrix = 2;
+			//Resize matrix (Only 1 new row because we already have 1)
+			size_t nr = subpart_matrix.rows();
+			subpart_matrix.conservativeResize(nr + 1, dem_constr.size());
+			//Resize rhs matrix
+			size_t nr_rhs = rhs_checkpart.rows();
+			rhs_checkpart.conservativeResize(nr_rhs + 2, 1);
+			//Populate rhs
+			rhs_checkpart(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[0][0];
+			rhs_checkpart(nr_rhs + 1, 0) = comcon_part_tree.demand_breakpoints[0][1];
+		}
+		else if (comcon_part_tree.demand_breakpoints[0].size() == 2 && k == 2) {
+			//Negative coefficients in matrix
+			inse = -1.0;
+			new_rows_matrix = 1;
+			//Resize matrix (not necessary here because it was defined with 1 row)
+			//Resize rhs matrix
+			size_t nr_rhs = rhs_checkpart.rows();
+			rhs_checkpart.conservativeResize(nr_rhs + 1, 1);
+			//Populate rhs
+			rhs_checkpart(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[0][1];
+		}
+		//Populate the matrix
+		size_t nr = subpart_matrix.rows();
+		if (new_rows_matrix == 1) {
+			for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+				subpart_matrix.insert(nr - 1, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = inse;
+			}
+		} else if (new_rows_matrix == 2) {
+			for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+				subpart_matrix.insert(nr - 2, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = inse;
+			}
+			for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+				subpart_matrix.insert(nr - 1, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = -1.0*inse;
+			}
+		}
+		counting++;
+		recursive_gen_subregions_eigen(rhs_checkpart, subpart_matrix, counting, control_tobe_updated);
+	}
+	
+}
+
+
+//recursively creating all possible combinations of subregions
+void CP_GAPM::recursive_gen_subregions(vector<vector<string>> &ineqs, vector<vector<double>> &break_values, size_t &counting, whole_partition &control_tobe_updated) {
+	//add elements until the last position of comcon_part_tree is reached
+	if (counting < comcon_part_tree.clients.size()) {
+		for (size_t k = 0; k < comcon_part_tree.demand_breakpoints[counting].size() + 1; k++) {
+			if (comcon_part_tree.demand_breakpoints[counting].size() >= 1 && k == 0) {
+				ineqs.push_back({ "leq" });
+				break_values.push_back({ comcon_part_tree.demand_breakpoints[counting][0] });
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 1 && k == 1) {
+				ineqs.push_back({ "g" });
+				break_values.push_back({ comcon_part_tree.demand_breakpoints[counting][0] });
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 2 && k == 1) {
+				ineqs.push_back({ "g", "leq" });
+				break_values.push_back({ comcon_part_tree.demand_breakpoints[counting][0], comcon_part_tree.demand_breakpoints[counting][1] });
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 2 && k == 2) {
+				ineqs.push_back({ "g" });
+				break_values.push_back({ comcon_part_tree.demand_breakpoints[counting][1] });
+			}
+			counting += 1;
+			recursive_gen_subregions(ineqs, break_values, counting, control_tobe_updated);
+			ineqs.pop_back();
+			break_values.pop_back();
+			counting -= 1;
+		}
+	}
+	else {
+		//a method to push back a new subpartition
+		control_tobe_updated.add_subregion_store(ineqs, break_values, comcon_part_tree.clients);
+	}
+}
+
+void CP_GAPM::recursive_gen_subregions_eigen(Eigen::MatrixXd &break_values, Eigen::SparseMatrix<double> &subpart_matrix, size_t &counting, eigen_partition &control_tobe_updated) {
+	if (counting < comcon_part_tree.clients.size()) {
+		for (size_t k = 0; k < comcon_part_tree.demand_breakpoints[counting].size() + 1; k++) {
+			double inse;
+			double new_rows_matrix = 0;
+			if (comcon_part_tree.demand_breakpoints[counting].size() >= 1 && k == 0) {
+				//Positive coefficients in matrix
+				inse = 1.0;
+				new_rows_matrix = 1;
+				//Resize matrix (1 new position)
+				size_t nr = subpart_matrix.rows();
+				subpart_matrix.conservativeResize(nr + 1, dem_constr.size());
+				//Resize rhs matrix
+				size_t nr_rhs = break_values.rows();
+				break_values.conservativeResize(nr_rhs + 1, 1);
+				//Populate rhs
+				break_values(nr_rhs, 0) = comcon_part_tree.demand_breakpoints[counting][0];
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 1 && k == 1) {
+				//Negative coefficients in matrix
+				inse = -1.0;
+				new_rows_matrix = 1;
+				//Resize matrix (1 new position)
+				size_t nr = subpart_matrix.rows();
+				subpart_matrix.conservativeResize(nr + 1, dem_constr.size());
+				//Resize rhs matrix
+				size_t nr_rhs = break_values.rows();
+				break_values.conservativeResize(nr_rhs + 1, 1);
+				//Populate rhs
+				break_values(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[counting][0];
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 2 && k == 1) {
+				//Positive and Negative coefficients in matrix
+				inse = -1.0;
+				new_rows_matrix = 2;
+				//Resize matrix (2 new positions)
+				size_t nr = subpart_matrix.rows();
+				subpart_matrix.conservativeResize(nr + 2, dem_constr.size());
+				//Resize rhs matrix
+				size_t nr_rhs = break_values.rows();
+				break_values.conservativeResize(nr_rhs + 2, 1);
+				//Populate rhs
+				break_values(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[counting][0];
+				break_values(nr_rhs + 1, 0) = comcon_part_tree.demand_breakpoints[counting][1];
+			}
+			else if (comcon_part_tree.demand_breakpoints[counting].size() == 2 && k == 2) {
+				//Negative coefficients in matrix
+				inse = -1.0;
+				new_rows_matrix = 1;
+				//Resize matrix (1 new position)
+				size_t nr = subpart_matrix.rows();
+				subpart_matrix.conservativeResize(nr + 1, dem_constr.size());
+				//Resize rhs matrix
+				size_t nr_rhs = break_values.rows();
+				break_values.conservativeResize(nr_rhs + 1, 1);
+				//Populate rhs
+				break_values(nr_rhs, 0) = -1.0 * comcon_part_tree.demand_breakpoints[counting][1];
+			}
+			//cout << break_values << endl;
+			//Populate the matrix
+			size_t nr = subpart_matrix.rows();
+			if (new_rows_matrix == 1) {
+				for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+					subpart_matrix.insert(nr - 1, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = inse;
+				}
+			}
+			else if (new_rows_matrix == 2) {
+				for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+					subpart_matrix.insert(nr - 2, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = inse;
+				}
+				for (size_t i = 0; i < comcon_part_tree.clients[counting].size(); i++) {
+					subpart_matrix.insert(nr - 1, dem_constr[ordered_dem_constr[comcon_part_tree.clients[counting][i]]]) = -1.0*inse;
+				}
+			}
+			counting++;
+			recursive_gen_subregions_eigen(break_values, subpart_matrix, counting, control_tobe_updated);
+			subpart_matrix.conservativeResize(subpart_matrix.rows() - new_rows_matrix, dem_constr.size());
+			break_values.conservativeResize(break_values.rows() - new_rows_matrix, 1);
+			counting -= 1;
+		}
+	}
+	else {
+		//a method to push back a new subpartition
+		//cout << subpart_matrix << endl;
+		control_tobe_updated.add_subregion_store(break_values, subpart_matrix);
+	}
+}
+
+void CP_GAPM::classify_scenarios() {
+	partition.clear();
+	partition.resize(control_subregions_new.pr.size());
+	for (size_t s = 0; s < nScenarios; s++) {
+		//check where should be this scenario added
+		//compute scenario demand of each tree into conex component
+		for (size_t i = 0; i < control_subregions_new.pr.size(); i++) {
+			vector<double> demand_tree (control_subregions_new.pr[i].clients.size(), 0.0);
+			for (size_t j = 0; j < control_subregions_new.pr[i].clients.size(); j++) {
+				for (size_t k = 0; k < control_subregions_new.pr[i].clients[j].size(); k++) {
+					size_t cl = control_subregions_new.pr[i].clients[j][k];
+					//Now look for the index of the client to get its demands
+					vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), cl);
+					size_t pos = distance(dem_constr.begin(), it);
+					demand_tree[j] += stoch_param[pos][s];
+				}
+			}
+			//we now have the total demand for each tree for a given scenario s
+			//Now we need to check where this scenario should be added
+			//we get a bool value from classify_one_scenario to know id the scenario belongs to the current i subregion
+			bool belongto = classify_one_scenario(demand_tree, i);
+			//add the scenario to the element into the parition
+			if (belongto == true) {
+				partition[i].push_back(s);
+			}
+		}
+	}
+}
+
+bool CP_GAPM::classify_one_scenario(vector<double> &demand_tree, size_t &i) {
+	//to totalize the number of conditions satisfied
+	size_t ncond_satisfied = 0;
+	for (size_t j = 0; j < control_subregions_new.pr[i].ineq_sign.size(); j++) {
+		if (control_subregions_new.pr[i].ineq_sign[j].size() == 1) {
+			//there is only one condition to be checked as inequality
+			if (control_subregions_new.pr[i].ineq_sign[j][0] == "leq") {
+				if (! (demand_tree[j] <= control_subregions_new.pr[i].demand_breakpoints[j][0]))
+					return false;
+			} else if (control_subregions_new.pr[i].ineq_sign[j][0] == "g") {
+				if (!(demand_tree[j] > control_subregions_new.pr[i].demand_breakpoints[j][0]) )
+					return false;
+			}
+		}
+		else if (control_subregions_new.pr[i].ineq_sign[j].size() == 2) {
+			//there are 2 conditions to be checked as inequalities
+			if (control_subregions_new.pr[i].ineq_sign[j][0] == "g" && control_subregions_new.pr[i].ineq_sign[j][1] == "leq") {
+				if (!((demand_tree[j] > control_subregions_new.pr[i].demand_breakpoints[j][0]) && (demand_tree[j] <= control_subregions_new.pr[i].demand_breakpoints[j][1])))
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
+void CP_GAPM::Inner_GAPM(const char &algo){
+	//Initialize control variables
+	auto time_span = static_cast<chrono::duration<double>>(inner_gampm_runningtime.end - inner_gampm_runningtime.start);
+	double run_time = time_span.count();
+	inner_gapm_iterations = 0;
+	inner_gap = 1;
+	inner_lb_gapm = -DBL_MAX;
+	inner_ub_gapm = DBL_MAX;
+
+	//create the master problem
+	/*IloModel master = MasterProblemCreation(algo);
+	IloCplex cplex_master(master.getEnv());
+	cplex_master.extract(master);
+	master.end();
+	cplex_master.end();*/
+
+	//subproblem creation
+	SPProblemCreation_GRB();
+
+	//previous x solution
+	//MAYBE useful to evaluate if my solution changes
+	vector<double> prev_x(x_bar.size());
+
+	bool cont = true;
+	while (cont) {
+		//update number of iterations
+		inner_gapm_iterations++;
+		//create master again
+		IloModel master = MasterProblemCreation(algo);
+		IloCplex cplex_master(master.getEnv());
+		cplex_master.extract(master);
+		MasterProblemSolution(&cplex_master, master, inner_lb_gapm, timelimit - run_time);
+
+		vector<vector<size_t>> cp_part = partition;
+		//runn all functions to divide the outcome space
+		for (size_t s = 0; s < cp_part.size(); s++) {
+			LookCompCon(s);
+			CapacityComCon(s);
+			FlowsComCon(s);
+			TotalDemandTree(s);
+			CheckCasesComcon(s);
+			//update_subregions(inner_gapm_iterations, s);
+			update_subregions_eigen(inner_gapm_iterations, s);
+
+			//GenSubpartitions();
+			//GenExpectedScen();
+			//FinalScenariosSubparts();
+
+			
+			
+		}
+
+		matrix_partition_new.copy_scenarios(stoch_param);
+		partition = matrix_partition_new.scenario_classif();
+
+		//classify_scenarios();
+
+		//Delete empty subregions
+		vector<size_t> empty_index;
+		for (size_t s = 0; s < partition.size(); s++) {
+			if (partition[s].size() == 0) {
+				empty_index.push_back(s);
+			}
+		}
+		DeleteAll(partition, empty_index);
+		//DeleteAllWP(control_subregions_new, empty_index);
+		DeleteAllWP(matrix_partition_new, empty_index);
+		inner_lb_gapm = cplex_master.getObjValue();
+		part_prob.clear();
+		part_prob.resize(partition.size());
+		for (size_t s = 0; s < partition.size(); s++) {
+			part_prob[s] = partition[s].size() / double(nScenarios);
+		}
+		
+		size_t tot_s = 0;
+		vector<size_t> prpr;
+		for (size_t s = 0; s < partition.size(); s++) {
+			tot_s += partition[s].size();
+			for (size_t p = 0; p < partition[s].size(); p++) {
+				prpr.push_back(partition[s][p]);
+			}
+		}
+		vector<size_t> unique_par = prpr;
+		sort(unique_par.begin(), unique_par.end());
+		vector<size_t>::iterator it;
+		it = unique(unique_par.begin(), unique_par.end());
+		unique_par.resize(distance(unique_par.begin(), it));
+
+		cout << "current lower bound is: " << inner_lb_gapm << endl;
+	}
+}
+
+void CP_GAPM::index_plants_clients() {
+	//resizing vectors
+	ordered_terminals.resize(terminals.size());
+	ordered_dem_constr.resize(dem_constr.size());
+
+	//find and allocate the index positions
+	for (size_t i = 0; i < ordered_terminals.size(); i++) {
+		vector<size_t>::iterator it = find(terminals.begin(), terminals.end(), (i + 1));
+		size_t pos = distance(terminals.begin(), it);
+		ordered_terminals[i] = pos;
+	}
+
+	for (size_t i = 0; i < ordered_dem_constr.size(); i++) {
+		vector<size_t>::iterator it = find(dem_constr.begin(), dem_constr.end(), (i + 1));
+		size_t pos = distance(dem_constr.begin(), it);
+		ordered_dem_constr[i] = pos;
+	}
+}
+
+
+void whole_partition::add_subregion_store(vector<vector<string>> &ineqs, vector<vector<double>> &break_values, vector<vector<size_t>> &clients) {
+	pr.resize(pr.size() + 1);
+	//add elements to the last position of the subregions control
+	pr[pr.size() - 1].clients = clients;
+	pr[pr.size() - 1].ineq_sign = ineqs;
+	pr[pr.size() - 1].demand_breakpoints = break_values;
+}
+
+
+void eigen_partition::instantiate_matrix(const size_t &nnz_reserve, const size_t &nineq) {
+	pr.resize(pr.size() + 1);
+
+	pr.back().subpart_matrix.reserve(nnz_reserve);
+	pr.back().rhs_checkpart.resize(nineq,1);
+}
+
+void eigen_partition::add_subregion_store(Eigen::MatrixXd &break_values, Eigen::SparseMatrix<double> &subpart_matrix) {
+	pr.resize(pr.size() + 1);
+
+	pr[pr.size() - 1].subpart_matrix = subpart_matrix;
+	pr[pr.size() - 1].rhs_checkpart = break_values;
+}
+
+void eigen_partition::copy_scenarios(vector<vector<double>> &full_scenarios) {
+	size_t nr = full_scenarios.size();
+	size_t nc = full_scenarios[0].size();
+
+	cp_scen.resize(nr, nc);
+
+	for (size_t i = 0; i < nr; i++) {
+		for (size_t j = 0; j < nc; j++) {
+			cp_scen(i, j) = full_scenarios[i][j];
+		}
+	}
+
+	for (size_t j = 0; j < nc; j++) {
+		scenarios.push_back(j);
+	}
+}
+
+vector<vector<size_t>> eigen_partition::scenario_classif() {
+	vector<vector<size_t>> partition;
+
+	for (size_t p = 0; p < pr.size(); p++) {
+		//Multiply the subpart matrix by the remaining scenarios and check which of them belong to this subpartition
+		//Remove those which belong to this sp from the current setlist of scenarios
+		partition.push_back({});
+
+		//vector which will contain the elements that should be removed from current set of scenarios
+		vector<size_t> to_rem;
+
+		Eigen::MatrixXd result;
+
+		result = pr[p].subpart_matrix * cp_scen;
+
+		//cout << result << endl;
+		
+		//Now check each column from result ato check which scenarios should belong to this subregion p
+		for (size_t j = 0; j < result.cols(); j++) {
+			bool belong = true;
+			for (size_t i = 0; i < result.rows(); i++) {
+				if (result(i, j) > pr[p].rhs_checkpart(i, 0)) {
+					belong = false;
+					break;
+				}
+			}
+			if (belong == true) {
+				partition[p].push_back(scenarios[j]);
+				to_rem.push_back(j);
+			}
+		}
+
+
+		while (to_rem.size() > 0) {
+			removeColumn(cp_scen, to_rem[0]);
+			scenarios.erase(scenarios.begin() + to_rem[0]);
+			to_rem.erase(to_rem.begin());
+			size_t su = 1;
+			subtractScalar(to_rem, su);
+		}
+	}
+
+	return partition;
 }

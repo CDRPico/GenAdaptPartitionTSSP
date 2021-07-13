@@ -31,6 +31,7 @@ int main(int argc, char **argv) {
 			//Creating instance of the problem based on previous files
 			CP_GAPM Instance(file_ce_core, file_ce_stoch, file_ce_time, testname);
 			Instance.gapm_type = 's';
+			Instance.Inner_GAPM(algo);
 			//Instance.partition.push_back(vector<size_t>(create_partition(Instance.nScenarios)));
 			/*Instance.partition.clear();
 			Instance.partition.resize(Instance.nScenarios);
@@ -38,8 +39,8 @@ int main(int argc, char **argv) {
 				Instance.partition.push_back({ s });
 			}*/
 			//Start the GAPM
-			GAPM algor;
-			algor.gapm_algorithm(Instance, algo, Instance.stoch_constr.size());
+			//GAPM algor;
+			//algor.gapm_algorithm(Instance, algo, Instance.stoch_constr.size());
 		}
 		else if (algo == 'f') {
 			CP_GAPM Instance(file_ce_core, file_ce_stoch, file_ce_time, testname);

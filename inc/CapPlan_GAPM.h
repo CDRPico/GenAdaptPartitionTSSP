@@ -15,10 +15,75 @@
 #include<cfloat>
 #include"UsfFunctions.h"
 #include"SMPS_ElecPlan.h"
+#include<Eigen/Dense>
+#include<Eigen/Sparse>
+
+//This structure will keep track of a matrix which charaterizes a subpartition
+struct eigen_characterisation {
+	//A sparse matrix which multiply the scenarios and then check which of them belong to this partition
+	Eigen::SparseMatrix<double> subpart_matrix;
+	//A vector which contains the values to check the inequalities
+	Eigen::MatrixXd rhs_checkpart;
+};
+
+//A class to manipulate the entire partition (it includes many matrices which are multiplied by the scenarios)
+class eigen_partition {
+public:
+	//Many matrices
+	vector<eigen_characterisation> pr;
+
+	//A constructor for each eigen_characterisation
+	//it takes the estimated number of nonzeros into the matrix and the size of the rhs vector
+	void instantiate_matrix(const size_t &nnz_reserve, const size_t &nineq);
+
+	//method to add a new subpartition to control_subregions_new
+	void add_subregion_store(Eigen::MatrixXd &break_values, Eigen::SparseMatrix<double> &subpart_matrix);
+
+	//copy of the scenarios
+	Eigen::MatrixXd cp_scen;
+	vector<double> scenarios;
+	
+	//Copy scenarios from vector of vectors to dense matrix
+	void copy_scenarios(vector<vector<double>> &full_scenarios);
+
+	//A method to check which scenarios belong to each subpartition
+	//Here the matrix multiplication is carried out
+	vector<vector<size_t>> scenario_classif();
+};
 
 using namespace std;
 
 ILOSTLBEGIN
+
+struct part_characterisation {
+	//store clients of a given tree
+	vector<vector<size_t>> clients;
+	//store signs of inequalities
+	//L stands for smaller or equal
+	//G stands for greater
+	vector<vector<string>> ineq_sign;
+	//store demand breakpoints
+	vector<vector<double>> demand_breakpoints;
+};
+
+struct part_matrix_char {
+	//for this implementation I will keep clients that belong to the current partition in a vector
+	//A matrix that will contain the coefficients of the inequalities 
+	vector<vector<double>> part_ineq_coef;
+	//a vector of string containing the inequalities sign
+	vector<string> ineq_sign;
+	//the breakpoints of the demand
+	vector<double> demand_breakpoints;
+};
+
+class whole_partition {
+public:
+
+	vector<part_characterisation> pr;
+
+	//method to add a new subpartition to control_subregions_new
+	void add_subregion_store(vector<vector<string>> &ineqs, vector<vector<double>> &break_values, vector<vector<size_t>> &clients);
+};
 
 
 class CP_GAPM : public Inst_ElecPlan {
@@ -60,6 +125,12 @@ public:
 
 	//Create master problem given a certain partition
 	IloModel MasterProblemCreation(const char &algo, bool = false);
+
+	//Create a vector to map the position where each plant is allocated in terminals vector
+	vector<size_t> ordered_terminals;
+	//Create a vector to map the position where each client is allocated in dem_constr vector
+	vector<size_t> ordered_dem_constr;
+	void index_plants_clients();
 
 	// Solve master problem given a certain partition
 	void MasterProblemSolution(IloCplex *cplex_master, IloModel &master, double &LB, const double &TL);
@@ -131,6 +202,50 @@ public:
 	//Type of GAPM (scenarios or full problem)
 	char gapm_type;
 
+	//To control the partition and breakpoints
+	//vector of inequelity signs is not necessary here
+	//part_characterisation general_tree_part;
+	//Used to return the features a new partition for each subpartition in the current iteration
+	part_characterisation comcon_part_tree;
+	//vector of part_characterisation
+	//each position will contain conditions that one subregion must satisfy
+	whole_partition control_subregions_old;
+	//at the beginning of each iteration new becomes old
+	//from old we generate new subregions for each given old region
+	whole_partition control_subregions_new;
+
+	//-------------- THIS IS ALTERNATIVE TO MANAGE THE PARTITION USING EIGEN LIBRARY ------------------------------
+	eigen_partition matrix_partition_old;
+	eigen_partition matrix_partition_new;
+
+	//using the vector of vector from CheckCasesComcon Method
+	//we can update subregions
+	void update_subregions(const size_t &iteration, const size_t &s);
+
+	void update_subregions_eigen(const size_t &iteration, const size_t &s);
+
+	//at each iteration the control_subregions_new will be initialized
+	//either because it is the first iteration
+	//or because s = 0 and first subregions must be added
+	void initialize_subregions_it(whole_partition &control_tobe_updated);
+	//the same method but using eigen matrices
+	void initialize_subregions_eigen(eigen_partition &control_tobe_updated);
+
+	//recursive method to generate all combinations of subregions
+	void recursive_gen_subregions(vector<vector<string>> &ineqs, vector<vector<double>> &break_values, size_t &counting, whole_partition &control_tobe_updated);
+	void recursive_gen_subregions_eigen(Eigen::MatrixXd &break_values, Eigen::SparseMatrix<double> &subpart_matrix, size_t &counting, eigen_partition &control_tobe_updated);
+
+	//A method to update subregion by pushing back the new constraints of the current iterations
+	void update_subregions_it(const size_t &s, whole_partition &new_control, whole_partition &control_tobe_updated);
+
+	void update_subregions_it_eigen(const size_t &s, eigen_partition &new_control, eigen_partition &control_tobe_updated);
+
+	//classify scenarios after creating subregions
+	void classify_scenarios();
+	bool classify_one_scenario(vector<double> &demand_tree, size_t &i);
+
+	//check if a subregion already exists in the array of subregions
+	bool sr_exists(part_characterisation &new_sr);
 
 	vector<vector<vector<vector<size_t>>>> subpartitions;
 	vector<vector<size_t>> subpart_clients;
@@ -160,6 +275,8 @@ public:
 	//Full problem for benchmark
 	void FullCP();
 
+	//An inner method to run the especial version of the GAPM
+	void Inner_GAPM(const char &algo);
 
 protected:
 	//Master entities
@@ -173,6 +290,17 @@ protected:
 
 	//Subproblem entities Gurobi
 	SubProblem_GRB sp_entities_grb;
+
+private:
+
+	//I'm gonna create an inner GAPM, especialized for subdividing regions
+	//as the problems suggests
+	double inner_lb_gapm;
+	double inner_ub_gapm;
+	double inner_gap;
+	MyClock inner_gampm_runningtime;
+	size_t inner_gapm_iterations;
+
 
 };
 

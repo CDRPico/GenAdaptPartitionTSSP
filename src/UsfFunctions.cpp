@@ -405,11 +405,12 @@ template void FeasibilityConstraint<BendersSFLP>(BendersSFLP &BendersProb);
 template void FeasibilityConstraint<OuterBendersSFLP>(OuterBendersSFLP &BendersProb);
 
 
-//Delete mant elements of a vector at once
-void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices)
+//Delete many elements of a vector at once
+template <class T>
+void DeleteAll(vector<T> &data, const vector<size_t>& deleteIndices)
 {
 	vector<bool> markedElements(data.size(), false);
-	vector<size_t> tempBuffer;
+	vector<T> tempBuffer;
 	tempBuffer.reserve(data.size() - deleteIndices.size());
 
 	for (vector<size_t>::const_iterator itDel = deleteIndices.begin(); itDel != deleteIndices.end(); itDel++)
@@ -422,7 +423,40 @@ void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices)
 	}
 	data = tempBuffer;
 }
+template void DeleteAll(vector<size_t> &data, const vector<size_t>& deleteIndices);
+template void DeleteAll(vector<vector<size_t>> &data, const vector<size_t>& deleteIndices);
 
+void DeleteAllWP(whole_partition &data, const vector<size_t> &deleteIndices) {
+	vector<bool> markedElements(data.pr.size(), false);
+	whole_partition tempBuffer;
+	tempBuffer.pr.reserve(data.pr.size() - deleteIndices.size());
+
+	for (vector<size_t>::const_iterator itDel = deleteIndices.begin(); itDel != deleteIndices.end(); itDel++)
+		markedElements[*itDel] = true;
+
+	for (size_t i = 0; i < data.pr.size(); i++)
+	{
+		if (!markedElements[i])
+			tempBuffer.add_subregion_store(data.pr[i].ineq_sign, data.pr[i].demand_breakpoints, data.pr[i].clients);
+	}
+	data = tempBuffer;
+}
+
+void DeleteAllWP(eigen_partition &data, const vector<size_t> &deleteIndices) {
+	vector<bool> markedElements(data.pr.size(), false);
+	eigen_partition tempBuffer;
+	tempBuffer.pr.reserve(data.pr.size() - deleteIndices.size());
+
+	for (vector<size_t>::const_iterator itDel = deleteIndices.begin(); itDel != deleteIndices.end(); itDel++)
+		markedElements[*itDel] = true;
+
+	for (size_t i = 0; i < data.pr.size(); i++)
+	{
+		if (!markedElements[i])
+			tempBuffer.add_subregion_store(data.pr[i].rhs_checkpart, data.pr[i].subpart_matrix);
+	}
+	data = tempBuffer;
+}
 
 bool is_integer(float k)
 {
@@ -446,3 +480,89 @@ void remove_duplicates(vector<size_t> &v)
 
 	v.erase(itr, v.end());
 }
+
+template <class T>
+bool compareVectors(vector<T> &base_case, vector<T> &compare) {
+	//we start assuming both vectors have the same size
+	//count the number of elements found in the original vector
+	size_t equalities = 0;
+	vector<T> copy_base_case = base_case;
+	for (size_t a = 0; a < compare.size(); a++) {
+		pair<bool, size_t> res = findInVector(copy_base_case, compare[a]);
+		if (res.first) {
+			equalities += 1;
+			copy_base_case.erase(copy_base_case.begin() + res.second);
+		}
+		else {
+			return false;
+		}
+	}
+	if (equalities == compare.size()) {
+		return true;
+	}
+	else {
+		return false;
+	}
+	return false;
+}
+template bool compareVectors(vector<size_t> &base_case, vector<size_t> &compare);
+template bool compareVectors(vector<string> &base_case, vector<string> &compare);
+template bool compareVectors(vector<double> &base_case, vector<double> &compare);
+
+
+template<class T>
+pair<bool, size_t > findInVector(vector<T>  & vecOfElements,  T  &element) {
+	pair<bool, size_t > result;
+	// Find given element in vector
+	auto it = find(vecOfElements.begin(), vecOfElements.end(), element);
+	if (it != vecOfElements.end())
+	{
+		result.second = distance(vecOfElements.begin(), it);
+		result.first = true;
+	}
+	else
+	{
+		result.first = false;
+		result.second = -1;
+	}
+	return result;
+}
+template pair<bool, size_t > findInVector(vector<size_t>  & vecOfElements, size_t  &element);
+template pair<bool, size_t > findInVector(vector<string>  & vecOfElements, string  &element);
+
+pair <bool, size_t> findInVector(vector<double> & vecOfElements, double & element) {
+	pair<bool, size_t > result;
+	result.first = false;
+	result.second = -1;
+	// Find given element in vector
+	for (size_t i = 0; i < vecOfElements.size(); i++) {
+		if (abs(element - vecOfElements[i]) < tol_difference) {
+			result.second = i;
+			result.first = true;
+			break;
+		}
+	}
+	return result;
+}
+
+void removeColumn(Eigen::MatrixXd& matrix, size_t colToRemove)
+{
+	size_t numRows = matrix.rows();
+	size_t numCols = matrix.cols() - 1;
+
+	if (colToRemove < numCols)
+		matrix.block(0, colToRemove, numRows, numCols - colToRemove) = matrix.block(0, colToRemove + 1, numRows, numCols - colToRemove);
+
+	matrix.conservativeResize(numRows, numCols);
+}
+
+template<class T>
+void subtractScalar(vector<T> &vec, T &scalar) {
+	size_t n = vec.size();
+
+	for (size_t i = 0; i < n; i++) {
+		vec[i] = vec[i] - scalar;
+	}
+}
+template void subtractScalar(vector<double> &vec, double &scalar);
+template void subtractScalar(vector<size_t> &vec, size_t &scalar);

@@ -298,7 +298,7 @@ void BendersCP::CreateMaster(const char &algo, vector<vector<size_t>> &part, vec
 
 }
 
-void BendersCP::solveMaster(solFeat &org) {
+void BendersCP::solveMaster(solFeat &org, size_t &iterations) {
 	/* Create cplex enviroment to solve the problem */
 	
 	//Setting parameters to solve master problem
@@ -312,6 +312,7 @@ void BendersCP::solveMaster(solFeat &org) {
 
 	cplex.extract(Mast_mod);
 	cplex.exportModel("masterBenders_CP.lp");
+	cplex.setOut(Mast_Bend.getNullStream());
 
 	//cplex.use(BendersCallback_CP(this->Mast_Bend, *this, org));
 
@@ -320,6 +321,12 @@ void BendersCP::solveMaster(solFeat &org) {
 
 	//Recovering the solution
 	RecoverSolution(cplex, org);
+
+	cout << "PartialReport:" << " "
+	     << iterations << " "
+		 << obj_fin << " "
+		 << org.user_optCuts << " "
+		 << partition.size() << endl;
 }
 
 void BendersCP::RecoverSolution(IloCplex &master_cpx, solFeat &org) {
@@ -327,8 +334,8 @@ void BendersCP::RecoverSolution(IloCplex &master_cpx, solFeat &org) {
 		x_bar.resize(first_st_var.size());
 		for (size_t i = 0; i < first_st_var.size(); i++) {
 			x_bar[i] = master_cpx.getValue(ent_sflp.x[i]);
-			if (x_bar[i] > 0.0)
-				cout << "Plant " << first_st_var[i] << " has capacity " << x_bar[i] << " assigned." << endl;
+			/*if (x_bar[i] > 0.0)
+				cout << "Plant " << first_st_var[i] << " has capacity " << x_bar[i] << " assigned." << endl;*/
 		}
 
 		size_t scenarios;
@@ -351,6 +358,7 @@ void BendersCP::RecoverSolution(IloCplex &master_cpx, solFeat &org) {
 		status = master_cpx.getStatus();
 		exploredNodes = master_cpx.getNnodes();
 		cpx_runtime = master_cpx.getTime();
+
 	}
 	catch (IloException& ex) {
 		cerr << " ERROR: " << ex << endl;
@@ -394,8 +402,10 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 	org.user_optCuts = 0;
 	org.x_prev.resize(nFacilities, 0.0);
 
+	size_t iterations = 1;
+
 	//solve first master
-	solveMaster(org);
+	solveMaster(org, iterations);
 
 	if (algo == 'm') {
 		sp_info.clear();
@@ -416,7 +426,7 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		}
 
 		cutsindiasgg(org);
-		solveMaster(org);
+		solveMaster(org, iterations);
 	}/**/
 	/*else if (algo == 'a') {
 		sp_info.clear();
@@ -494,6 +504,7 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 	size_t nc = 10;
 	while (nc != 0 || org.part_modified == true) {
 		//Add cuts
+		iterations = iterations + 1;
 		prev_opt = obj_fin;
 		nc = 0;
 		bool violated = false;
@@ -503,7 +514,7 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		//update partition
 		disaggPartition(org, violated);
 		//solve the master updated
-		solveMaster(org);
+		solveMaster(org, iterations);
 		org.feasCuts += 1;
 		//}
 		GAP = fabs(prev_opt - obj_fin) / (1e-10 + fabs(prev_opt));
@@ -523,6 +534,13 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 	auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
 	double runtime_cut = time_span_cut.count();
 	cout << "it takes " << runtime_cut << "to execute the benders algorithm " << endl;
+
+	cout << "FinalReport:" << " "
+	     << iterations << " "
+		 << obj_fin << " "
+		 << org.user_optCuts << " "
+		 << partition.size() << " "
+		 << runtime_cut << endl;
 
 	return LB;
 }
@@ -548,12 +566,14 @@ double BendersCP::mixedBenders(const char &algo, vector<vector<size_t>> &part, v
 	org.user_optCuts = 0;
 	org.x_prev.resize(nFacilities, 0.0);
 
+	size_t iterations = 1;
 	//solve first master
-	solveMaster(org);
+	solveMaster(org, iterations);
 
 	size_t nc = 10;
 	while (nc != 0 || org.part_modified == true) {
 		//Add cuts
+		iterations = iterations + 1;
 		nc = 0;
 		bool violated = false;
 		updateMaster(org, nc, violated);
@@ -564,7 +584,7 @@ double BendersCP::mixedBenders(const char &algo, vector<vector<size_t>> &part, v
 		}
 		//solve the master updated
 		double prevobj = obj_fin;
-		solveMaster(org);
+		solveMaster(org, iterations);
 		
 
 		if (compareSolutions(org.x_prev, x_bar)) {
@@ -599,7 +619,7 @@ double BendersCP::mixedBenders(const char &algo, vector<vector<size_t>> &part, v
 				updateMaster(aux_org, nc1, violated1);
 				//solve the master updated
 				double prevobj = obj_fin;
-				solveMaster(org);
+				solveMaster(org, iterations);
 			}
 
 			partition.clear();

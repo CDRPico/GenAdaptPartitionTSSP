@@ -52,7 +52,7 @@ public:
 	void cutsindiasgg(solFeat &org);
 
 	//Solve Master
-	void solveMaster(solFeat &org);
+	void solveMaster(solFeat &org, size_t &iterations);
 
 	//Entities of the problem
 	entitiesBendCP ent_sflp;

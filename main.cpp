@@ -13,20 +13,28 @@ using namespace std;
 int main(int argc, char **argv) {
 	//string file = argv[1];	
 	//string file_stoch = argv[2];
-	//const char algo = argv[3][0];
+	string file_ce_time = argv[1];
+	string file_ce_core = argv[2];
+	string file_ce_stoch = argv[3];
+	//size_t nnn = 1000;
+	//testin.generate_instances(nnn);
+	string testname = argv[4];
+	
+	
+	const char algo = argv[5][0];
 
 	//problem, 1 for Capacity planning
 	//problem, 2 for facility location
 	int problem = 1;
 
 	if (problem == 1) {
-		string file_ce_time = "cp_instances/time_nospace.mps";
-		string file_ce_core = "cp_instances/core_nospace.mps";
-		string file_ce_stoch = "cp_instances/stoch_nospace.mps";
+		//string file_ce_time = "cp_instances/time_nospace.mps";
+		//string file_ce_core = "cp_instances/core_nospace.mps";
+		//string file_ce_stoch = "cp_instances/stoch_nospace.mps";
 		//size_t nnn = 1000;
 		//testin.generate_instances(nnn);
-		string testname = "capplan_small_1000.txt";
-		const char algo = 'b';
+		//string testname = "capplan_small_1000.txt";
+		const char algo = 'a';
 		if (algo == 'n') {
 			//Creating instance of the problem based on previous files
 			CP_GAPM Instance(file_ce_core, file_ce_stoch, file_ce_time, testname);

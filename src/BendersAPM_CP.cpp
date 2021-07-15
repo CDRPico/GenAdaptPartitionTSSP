@@ -304,10 +304,10 @@ void BendersCP::solveMaster(solFeat &org) {
 	//Setting parameters to solve master problem
 	IloCplex cplex(Mast_Bend);
 	cplex.setParam(IloCplex::Param::Preprocessing::Reduce, CPX_PREREDUCE_NOPRIMALORDUAL);
-	cplex.setParam(IloCplex::Param::Preprocessing::Linear, IloFalse);
+	//cplex.setParam(IloCplex::Param::Preprocessing::Linear, IloFalse);
 	cplex.setParam(IloCplex::Param::Preprocessing::Presolve, IloFalse);
 	cplex.setParam(IloCplex::Param::Threads, 1);
-	cplex.setParam(IloCplex::RootAlg, IloCplex::Dual);
+	//cplex.setParam(IloCplex::RootAlg, IloCplex::Dual);
 	cplex.setParam(IloCplex::Param::TimeLimit, timelimit);
 
 	cplex.extract(Mast_mod);
@@ -498,14 +498,14 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		nc = 0;
 		bool violated = false;
 		org.part_modified = false;
-		if (GAP > 1e-8) {
-			updateMaster(org, nc, violated);
-			//update partition
-			disaggPartition(org, violated);
-			//solve the master updated
-			solveMaster(org);
-			org.feasCuts += 1;
-		}
+		//if (GAP > 1e-8) {
+		updateMaster(org, nc, violated);
+		//update partition
+		disaggPartition(org, violated);
+		//solve the master updated
+		solveMaster(org);
+		org.feasCuts += 1;
+		//}
 		GAP = fabs(prev_opt - obj_fin) / (1e-10 + fabs(prev_opt));
 	}
 

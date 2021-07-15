@@ -504,7 +504,7 @@ double BendersSFLP::CreateMaster(const char &algo, vector<vector<size_t>> &part,
     IloCplex cplex(Mast_Bend);
     //Setting parameters to solve master problem
     cplex.setParam(IloCplex::Param::Preprocessing::Reduce, CPX_PREREDUCE_NOPRIMALORDUAL);
-    cplex.setParam(IloCplex::Param::Preprocessing::Linear, IloFalse);
+    //cplex.setParam(IloCplex::Param::Preprocessing::Linear, IloFalse);
     cplex.setParam(IloCplex::Param::Preprocessing::Presolve, IloFalse);
     cplex.setParam(IloCplex::Param::Threads, 1);
     cplex.setParam(IloCplex::Param::MIP::Display, 4);

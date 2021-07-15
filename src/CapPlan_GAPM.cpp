@@ -243,14 +243,14 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 			y_bar[i][s] = cplex_master->getValue(master_entities.y[i][s]);
 		}
 	}
-	IloNumArray lowerlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
+	/*IloNumArray lowerlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
 	IloNumArray upperlim(cplex_master->getEnv(), master_entities.linking_constraints.getSize());
-	cplex_master->getRHSSA(lowerlim, upperlim, master_entities.linking_constraints);
+	cplex_master->getRHSSA(lowerlim, upperlim, master_entities.linking_constraints);*/
 	/*for (size_t s = 0; s < master_entities.linking_constraints.getSize(); s++) {
 		cout << " Sensitivity analysis constraint " << s+1 << "[" << lowerlim[s] << " - " << upperlim[s] << "] " << cplex_master->getDual(master_entities.linking_constraints[s]) << endl;
 	}*/
 	LB = cplex_master->getObjValue();
-	LookCompCon(0);
+	/*LookCompCon(0);
 	CapacityComCon(0);
 	FlowsComCon(0);
 	TotalDemandTree(0);
@@ -264,7 +264,7 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 	for (size_t s = 0; s < part_prob.size(); s++) {
 		tot += part_prob[s];
 	}
-	LB = cplex_master->getObjValue();
+	LB = cplex_master->getObjValue();*/
 
 }
 

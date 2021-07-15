@@ -2,16 +2,28 @@
     "tasks": [
         {
             "type": "cppbuild",
-            "label": "C/C++: clang++ build active file",
-            "command": "/usr/bin/clang++",
+            "label": "C/C++: g++ build active file",
+			"command": "/usr/bin/g++",
             "args": [
                 "-g",
-                "${file}",
+                "main.cpp", "src/BendersAPM_CP.cpp", "src/BendersAPM_SFLP.cpp", "src/CapPlan_GAPM.cpp", "src/GAPM.cpp", 
+                "src/InstancesSFCMFP.cpp", "src/OuterBendersSFLP.cpp", "src/SFCMFP_GAPM.cpp", "src/SFLP_GAPM.cpp", "src/UsfFunctions.cpp",
+                "-I/inc", "-I/home/cdrpico/Documents/cppProjects/TSSPInstancesReader/inc",
+                "-I/opt/ibm/ILOG/CPLEX_Studio201/cplex/include/",
+                "-I/opt/ibm/ILOG/CPLEX_Studio201/concert/include/",
+                "-I/opt/gurobi910/linux64/include",
+                "-L/opt/gurobi910/linux64/lib/",
+                "-lgurobi_g++5.2", "-lgurobi91",
+                "-L/opt/ibm/ILOG/CPLEX_Studio201/concert/lib/x86-64_linux/static_pic/",
+                "-L/opt/ibm/ILOG/CPLEX_Studio201/cplex/lib/x86-64_linux/static_pic/",
+                "-lm", "-lconcert", "-lilocplex", "-lcplex", "-lpthread", "-ldl",
+                "-L/home/cdrpico/Documents/cppProjects/TSSPInstancesReader",
+                "-lread_instances_TSSP",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}"
             ],
             "options": {
-                "cwd": "/usr/bin"
+                "cwd": "${fileDirname}"
             },
             "problemMatcher": [
                 "$gcc"
@@ -20,7 +32,7 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "detail": "Generated task by Debugger"
+            "detail": "compiler: /usr/bin/g++"
         }
     ],
     "version": "2.0.0"

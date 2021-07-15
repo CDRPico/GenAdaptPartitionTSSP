@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 		//size_t nnn = 1000;
 		//testin.generate_instances(nnn);
 		string testname = "capplan_small_1000.txt";
-		const char algo = 'n';
+		const char algo = 'b';
 		if (algo == 'n') {
 			//Creating instance of the problem based on previous files
 			CP_GAPM Instance(file_ce_core, file_ce_stoch, file_ce_time, testname);
@@ -94,5 +94,5 @@ int main(int argc, char **argv) {
 			}
 		}
 	}
-	cin.get();
+	//cin.get();
 }

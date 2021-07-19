@@ -311,7 +311,7 @@ void BendersCP::solveMaster(solFeat &org, size_t &iterations) {
 	cplex.setParam(IloCplex::Param::TimeLimit, timelimit);
 
 	cplex.extract(Mast_mod);
-	cplex.exportModel("masterBenders_CP.lp");
+	//cplex.exportModel("masterBenders_CP.lp");
 	cplex.setOut(Mast_Bend.getNullStream());
 
 	//cplex.use(BendersCallback_CP(this->Mast_Bend, *this, org));
@@ -322,11 +322,11 @@ void BendersCP::solveMaster(solFeat &org, size_t &iterations) {
 	//Recovering the solution
 	RecoverSolution(cplex, org);
 
-	cout << "PartialReport:" << " "
+	/*cout << "PartialReport:" << " "
 	     << iterations << " "
 		 << obj_fin << " "
 		 << org.user_optCuts << " "
-		 << partition.size() << endl;
+		 << partition.size() << endl;*/
 }
 
 void BendersCP::RecoverSolution(IloCplex &master_cpx, solFeat &org) {
@@ -406,12 +406,23 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 	//solve first master
 	solveMaster(org, iterations);
+	end_cut = sc_cut.now();
+	auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
+	double runtime_cut = time_span_cut.count();
+
+	cout << "PartialReport:" << " "
+	     << iterations << " "
+		 << obj_fin << " "
+		 << org.user_optCuts << " "
+		 << partition.size() << " "
+		 << runtime_cut << endl;
 
 	if (algo == 'm') {
 		sp_info.clear();
 		stoch.clear();
 		sp_info.resize(nScenarios);
 		stoch.resize(nScenarios);
+		iterations += 1;
 		for (size_t s = 0; s < nScenarios; s++) {
 			vector<size_t> el(1, s);
 			sp_info[s].scen = el;
@@ -427,6 +438,17 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 		cutsindiasgg(org);
 		solveMaster(org, iterations);
+
+		end_cut = sc_cut.now();
+		auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
+		double runtime_cut = time_span_cut.count();
+
+		cout << "PartialReport:" << " "
+			<< iterations << " "
+			<< obj_fin << " "
+			<< org.user_optCuts << " "
+			<< partition.size() << " "
+			<< runtime_cut << endl;
 	}/**/
 	/*else if (algo == 'a') {
 		sp_info.clear();
@@ -518,6 +540,17 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		org.feasCuts += 1;
 		//}
 		GAP = fabs(prev_opt - obj_fin) / (1e-10 + fabs(prev_opt));
+
+		end_cut = sc_cut.now();
+		auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
+		double runtime_cut = time_span_cut.count();
+
+		cout << "PartialReport:" << " "
+	     << iterations << " "
+		 << obj_fin << " "
+		 << org.user_optCuts << " "
+		 << partition.size() << " "
+		 << runtime_cut << endl;
 	}
 
 	for (size_t i = 0; i < first_st_var.size(); i++) {
@@ -531,8 +564,8 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 
 	end_cut = sc_cut.now();
-	auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
-	double runtime_cut = time_span_cut.count();
+	time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
+	runtime_cut = time_span_cut.count();
 	cout << "it takes " << runtime_cut << "to execute the benders algorithm " << endl;
 
 	cout << "FinalReport:" << " "

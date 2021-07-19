@@ -216,7 +216,7 @@ void CP_GAPM::MasterProblemSolution(IloCplex *cplex_master, IloModel &master, do
 
 	//Solving
 	cplex_master->extract(master);
-	cplex_master->exportModel("master_capacityplanning.lp");
+	//cplex_master->exportModel("master_capacityplanning.lp");
 	cplex_master->solve();
 
 	// Solution recovery

@@ -38,6 +38,8 @@ void BendersCP::updateMaster(solFeat &org, size_t &nc, bool &violated)
 	IloExpr new_single_cut(Mast_Bend);
 	double const_part_single = 0.0;
 
+	org.second_st_val = 0;
+
 	//Checking if any cut should added
 	for (size_t p = 0; p < partition.size(); p++) {
 		sp_info_agg[p].scen = partition[p];
@@ -62,6 +64,8 @@ void BendersCP::updateMaster(solFeat &org, size_t &nc, bool &violated)
 				element_prob += probability[partition[p][s]];
 			}
 		}
+
+		org.second_st_val += element_prob * sp_info_agg[p].obj;
 
 		//constant of current first stage multiplied by duals of capacity constarints
 		double const_fs = 0.0;
@@ -123,6 +127,7 @@ void BendersCP::updateMaster(solFeat &org, size_t &nc, bool &violated)
 }
 
 void BendersCP::disaggPartition(solFeat &org, bool &violated) {
+	org.second_st_val = 0;
 	//Here we redefine org.par_modified to know in the future if the partition was modiied or not
 	org.part_modified = false;
 	if (violated == false && (org.algo == 'a' || org.algo == 'r') && partition.size() < nScenarios) {// && wherefrom == CPX_CALLBACK_MIP_INCUMBENT_NODESOLN) {
@@ -142,6 +147,7 @@ void BendersCP::disaggPartition(solFeat &org, bool &violated) {
 			}
 			double obj = 0.0;
 			SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
+			org.second_st_val += probability[s] * sp_info[s].obj;
 		}
 		//end = sc.now();
 		//auto time_span = static_cast<chrono::duration<double>>(end - start);
@@ -406,16 +412,56 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 
 	//solve first master
 	solveMaster(org, iterations);
+
+	size_t nc = 10;
+	bool violated = false;
+	updateMaster(org, nc, violated);
+	//update partition
+	if (org.algo == 'a') {
+		disaggPartition(org, violated);
+	}
+
+	org.UB = 0;
+	for (size_t i = 0; i < first_st_var.size(); i++) {
+		org.UB += x_bar[i] * fixed_costs[i];
+	}
+	if (org.algo == 'a') {
+		sp_info.clear();
+		stoch.clear();
+		sp_info.resize(nScenarios);
+		stoch.resize(nScenarios);
+		iterations += 1;
+		org.second_st_val = 0;
+		for (size_t s = 0; s < nScenarios; s++) {
+			vector<size_t> el(1, s);
+			sp_info[s].scen = el;
+			if (s == 0) {
+				SPProblemModification_GRB(sp_info[s].scen, true);
+			}
+			else {
+				SPProblemModification_GRB(sp_info[s].scen);
+			}
+			double obj = 0.0;
+			SPProbleSolution_GRB(stoch[s], &sp_info[s], true);
+			org.second_st_val += probability[s] * sp_info[s].obj;
+		}
+	}
+	org.UB += org.second_st_val;
+	GAP = fabs(org.UB - obj_fin) / (1e-10 + fabs(org.UB));
+
 	end_cut = sc_cut.now();
 	auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
-	double runtime_cut = time_span_cut.count();
+	double runtime_cut = time_span_cut.count();	
 
 	cout << "PartialReport:" << " "
 	     << iterations << " "
 		 << obj_fin << " "
+		 << org.UB << " "
+		 << GAP << " "
 		 << org.user_optCuts << " "
 		 << partition.size() << " "
 		 << runtime_cut << endl;
+	
 
 	if (algo == 'm') {
 		sp_info.clear();
@@ -439,13 +485,25 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		cutsindiasgg(org);
 		solveMaster(org, iterations);
 
+		violated = false;
+		updateMaster(org, nc, violated);
+
+		org.UB = 0;
+		for (size_t i = 0; i < first_st_var.size(); i++) {
+			org.UB += x_bar[i] * fixed_costs[i];
+		}
+		org.UB += org.second_st_val;
+		GAP = fabs(org.UB - obj_fin) / (1e-10 + fabs(org.UB));
+
 		end_cut = sc_cut.now();
 		auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
-		double runtime_cut = time_span_cut.count();
+		runtime_cut = time_span_cut.count();
 
 		cout << "PartialReport:" << " "
 			<< iterations << " "
 			<< obj_fin << " "
+			<< org.UB << " "
+		 	<< GAP << " "
 			<< org.user_optCuts << " "
 			<< partition.size() << " "
 			<< runtime_cut << endl;
@@ -519,35 +577,47 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 		solveMaster(org);
 	}*/
 
-	double prev_opt = -DBL_MAX;
 
-	GAP = fabs(prev_opt - obj_fin) / (1e-10 + fabs(prev_opt));
-
-	size_t nc = 10;
-	while (nc != 0 || org.part_modified == true) {
+	
+	while (nc != 0 and GAP > 1e-7 and runtime_cut <= 86400) {
 		//Add cuts
 		iterations = iterations + 1;
-		prev_opt = obj_fin;
 		nc = 0;
-		bool violated = false;
+		violated = false;
 		org.part_modified = false;
 		//if (GAP > 1e-8) {
-		updateMaster(org, nc, violated);
-		//update partition
-		disaggPartition(org, violated);
 		//solve the master updated
 		solveMaster(org, iterations);
+		
+		updateMaster(org, nc, violated);
+		//update partition
+		if (org.algo == 'a') {
+			double copt_cuts = org.user_optCuts;
+			disaggPartition(org, violated);
+			nc += org.user_optCuts - copt_cuts;
+		}
+
+		if (algo != 'a' || org.part_modified == true) {
+			double UB = 0;
+			for (size_t i = 0; i < first_st_var.size(); i++) {
+				UB += x_bar[i] * fixed_costs[i];
+			}
+			UB += org.second_st_val;
+
+			if (UB < org.UB) org.UB = UB;	
+		}
+		GAP = fabs(org.UB - obj_fin) / (1e-10 + fabs(org.UB));
 		org.feasCuts += 1;
-		//}
-		GAP = fabs(prev_opt - obj_fin) / (1e-10 + fabs(prev_opt));
 
 		end_cut = sc_cut.now();
 		auto time_span_cut = static_cast<chrono::duration<double>>(end_cut - start_cut);
-		double runtime_cut = time_span_cut.count();
+		runtime_cut = time_span_cut.count();
 
 		cout << "PartialReport:" << " "
 	     << iterations << " "
 		 << obj_fin << " "
+		 << org.UB << " "
+		 << GAP << " "
 		 << org.user_optCuts << " "
 		 << partition.size() << " "
 		 << runtime_cut << endl;
@@ -571,6 +641,8 @@ double BendersCP::runBenders(const char &algo, vector<vector<size_t>> &part, vec
 	cout << "FinalReport:" << " "
 	     << iterations << " "
 		 << obj_fin << " "
+		 << org.UB << " "
+		 << GAP << " "
 		 << org.user_optCuts << " "
 		 << partition.size() << " "
 		 << runtime_cut << endl;

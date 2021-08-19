@@ -7,6 +7,7 @@
 #include"../inc/BendersAPM_SFLP.h"
 #include"../inc/OuterBendersSFLP.h"
 #include"../inc/BendersAPM_CP.h"
+#include<algorithm>
 
 MyClock::MyClock(void) {
 	start = sc.now();
@@ -102,12 +103,15 @@ void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vecto
 	//a new partition will be created and will further replace the previous one
 	/*partition.clear();
 	partition.push_back(vector<size_t>(create_partition(nScenarios)));*/
-	vector<vector<size_t>> new_partition = refine(sp_info, partition, nScenarios);
+	vector<vector<size_t>> new_partition;
+	new_partition.reserve(nScenarios*2);
+	
+	new_partition = refine(sp_info, partition, nScenarios);
 	partition.clear();
 	partition = new_partition;
 	new_partition.clear();
-	cout << "the size of the partition now is " << partition.size() << endl;
-	/*for (size_t i = 0; i < partition.size(); i++) {
+	/*cout << "the size of the partition now is " << partition.size() << endl;
+	for (size_t i = 0; i < partition.size(); i++) {
 		for (size_t j = 0; j < partition[i].size(); j++) {
 			cout << partition[i][j] << ' ';
 		}
@@ -119,26 +123,22 @@ void disag_procedure::disaggregation(vector<solution_sps> &sp_info, vector<vecto
 vector<vector<size_t>> disag_procedure::refine(vector<solution_sps> &sp_info, vector<vector<size_t>> &partition, const double &nScenarios) {
 	size_t partition_size = partition.size();
 	vector<vector<size_t>> outpart;
-	for (size_t k = 0; k < partition_size; k++) {
+	outpart.reserve(nScenarios*2);
+	for (size_t s = 0; s < nScenarios; s++) {
+		sp_info[s].taxicab_norm = taxicab(sp_info[s].lambda);
+		sp_info[s].eucl_norm = norm2(sp_info[s].lambda);
+	}
+	
+	for (size_t i = 0; i < partition_size; i++) {
 		//Get the refination of element k into the partition
-		vector<vector<size_t>> partial = refine_element(sp_info, partition[k], nScenarios);
-		//Insert in outpart the vector obtained above
-		size_t tamano = outpart.size();
-		// if k = 0 outpart is empty and will be initialized with partial
-		if (k == 0) {
+		vector<vector<size_t>> partial = refine_element(sp_info, partition[i], nScenarios);
+		if (i == 0) {
 			outpart = partial;
 		}
-		// otherwise the data from partial will be pushed back one scenario at a time
 		else {
-			for (size_t la = 0; la < partial.size(); la++) {
-				for (size_t lb = 0; lb < partial[la].size(); lb++) {
-					if (lb == 0) {
-						outpart.push_back(vector<size_t>({ partial[la][lb] }));
-					}
-					else {
-						outpart[la + tamano].push_back(partial[la][lb]);
-					}
-				}
+			for (size_t j = 0; j < partial.size(); j++) {
+				outpart.resize(outpart.size() + 1);
+				outpart[outpart.size() - 1] = partial[j];
 			}
 			partial.clear();
 		}
@@ -150,48 +150,32 @@ vector<vector<size_t>> disag_procedure::refine(vector<solution_sps> &sp_info, ve
 vector<vector<size_t>> disag_procedure::refine_element(vector<solution_sps> &sp_info, vector<size_t> &element, const double &nScenarios) {
 	//Element size
 	size_t el_size = element.size();
+	// vector to copy the current scenarios into the element
+	vector<solution_sps> elepart(el_size);
+	for (size_t i = 0; i < el_size; i++) {
+		//cout << element[i] << " - " << sp_info[element[i]].scen.size() << endl;
+		elepart[i] = sp_info[element[i]];
+	}
 	//Vector to be returned
 	vector<vector<size_t>> new_element;
-	vector<double> taxicab_computation;
-	vector<double> normtwo_computation;
-	//Iterate through the element to compare the duals of the subproblems
-	for (size_t la = 0; la < el_size; la++) {
-		taxicab_computation.push_back(taxicab(sp_info[la].lambda));
-		normtwo_computation.push_back(norm2(sp_info[la].lambda));
-		if (la == 0) {
-			new_element.push_back(vector<size_t>({ element[la] }));
-		}
-		else {
-			size_t tamano = new_element.size();
-			//Create a new loop to compare current values regarding the previous already computed
-			for (size_t lb = 0; lb < tamano; lb++) {
-				if (sp_info[la].F == sp_info[new_element[lb].back()].F) {
-					bool signal = true;
-					if (fabs(taxicab_computation[la] - taxicab_computation[lb]) < tol_diff_disag &&
-						fabs(normtwo_computation[la] - normtwo_computation[lb]) < tol_diff_disag)
-					{
-						signal = compare_duals(sp_info[element[la]], sp_info[element[lb]], element[la], element[lb]);
-					}
-					// If there is no difference between lambdas, this scenario can be added to the current new element position
-					if (signal == false) {
-						new_element[lb].push_back(element[la]);
-						break;
-					}
-					//otherwise, continue checking until the end of the vector
-					//if no coincidence was found, another element is added
-					else {
-						if (lb == (tamano - 1)) {
-							new_element.push_back(vector<size_t>({ element[la] }));
-						}
-					}
-				}
-				else if (lb == (tamano - 1)) {
-					new_element.push_back(vector<size_t>({ element[la] }));
-				}
-			}
+	new_element.reserve(el_size*2);
+	
+	sort(elepart.begin(), elepart.end(), solution_sps::compsortDuals);
+	
+	vector<vector<size_t>> new_comp = check_equal_scen(elepart);
+	
+	new_element.resize(new_comp.size());
+	for (size_t j = 0; j < new_element.size(); j++) {
+		new_element[j].resize(new_comp[j][1]+1);
+		//cout << elepart[new_comp[j][0]].scen.size() << endl;
+		new_element[j][0] = elepart[new_comp[j][0]].scen[0];
+		for (size_t s = 1; s < new_element[j].size(); s++) {
+			new_element[j][s] = elepart[new_comp[j][0] + s].scen[0];
 		}
 	}
+
 	return new_element;
+	
 }
 
 //function to campare scenarios pairwise (their duals)
@@ -216,8 +200,56 @@ vector<double> disag_procedure::compute_part_prob(vector<vector<size_t>> &partit
 	return part_prob;
 }
 
+//Funcion para comparar y ordenar escenarios basado en la matriz de diferencia duales
+bool solution_sps::compsortDuals(const solution_sps &s1, const solution_sps &s2) {
+	return s1.lambda < s2.lambda;
+}
+
+// Method tocheck equality between pairwise scenarios once the dual class is sort
+vector<vector<size_t>> disag_procedure::check_equal_scen(vector<solution_sps> &dif_dual){
+	size_t scen = dif_dual.size();
+	size_t comm = dif_dual[0].lambda.size();
+	vector<double> cref_duales = dif_dual[0].lambda;
+	size_t cref = 0;
+
+	vector<vector<size_t>> r_part;
+	r_part.reserve(scen*2);
+	
+	size_t cont = 0;
+	for (size_t i = 1; i < scen; i++) {
+		if (compareDuals_vector(dif_dual[cref], dif_dual[i])) {
+			cont++;
+		} else {
+			r_part.resize(r_part.size()+1);
+			r_part[r_part.size()-1] = {cref, cont};
+			cref = i;
+			cont = 0;
+		}
+	}
+
+	r_part.resize(r_part.size()+1);
+	r_part[r_part.size()-1] = {cref, cont};
+	return r_part;
+}
+
 disag_procedure::~disag_procedure() {};
 
+bool compareDuals_vector(const solution_sps &s1, const solution_sps &s2) {
+	//Para recorrer nodos y commodities
+	//Cantidad de nodos y commodities
+	size_t Comm = s1.lambda.size();
+	//Comparando duales
+	if (fabs(s1.taxicab_norm - s2.taxicab_norm) > tol_diff_disag || fabs(s1.eucl_norm - s2.eucl_norm) > tol_diff_disag) {
+		return false;
+	} else {
+		for (size_t k = 0; k < Comm; k++) {
+			if (fabs(s1.lambda[k]- s2.lambda[k]) > tol_diff_disag) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
 
 template<class T>
 void AddVarsMaster(T &BendersProb, const char &algo) {

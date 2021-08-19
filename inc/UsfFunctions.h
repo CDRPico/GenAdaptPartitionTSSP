@@ -74,11 +74,15 @@ struct solFeat {
 	bool part_modified = false;
 	bool x_modified = false;
 
+	double UB = 0;
+	double second_st_val = 0;
+
 	solFeat() = default;
 };
 
 //Subproblem info solution
-struct solution_sps {
+class solution_sps {
+public:
 	//Vector of scenarios summarized
 	vector<size_t> scen;
 	//Bool indicating the status of the solution
@@ -90,6 +94,12 @@ struct solution_sps {
 	double obj;
 	//dual multipliers of key constraints
 	vector<double> lambda;
+
+	double taxicab_norm;
+	double eucl_norm;
+
+	//compare duals and sort them
+	static bool compsortDuals(const solution_sps &s1, const solution_sps &s2);
 };
 
 class disag_procedure 
@@ -107,6 +117,17 @@ public:
 	bool compare_duals(solution_sps &sp_info_s1, solution_sps &sp_info_s2, const size_t &s1, const size_t &s2);
 	//Compute the partition element probs
 	vector<double> compute_part_prob(vector<vector<size_t>> &partition, const double &nScenarios);
+	// Method tocheck equality between pairwise scenarios once the dual class is sort
+	vector<vector<size_t>> check_equal_scen(vector<solution_sps> &dif_dual);
+};
+
+class partition {
+public:
+	vector< size_t> ordered_scenarios;
+	vector< vector < size_t>> duales;
+	vector<vector<size_t>> cpart;
+
+	partition(const size_t &scen);
 };
 
 //Read instance data
@@ -146,5 +167,7 @@ void DeleteAll(vector<size_t>& data, const vector<size_t>& deleteIndices);
 bool is_integer(float k);
 
 void remove_duplicates(std::vector<size_t> &v);
+
+bool compareDuals_vector(const solution_sps &s1, const solution_sps &s2);
 
 #endif
